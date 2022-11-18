@@ -64,6 +64,7 @@ import org.apache.cassandra.config.CassandraRelevantProperties;
 import org.apache.cassandra.concurrent.*;
 import org.apache.cassandra.config.DataStorageSpec;
 import org.apache.cassandra.cql3.QueryHandler;
+import org.apache.cassandra.io.sstable.IVerifier;
 import org.apache.cassandra.dht.RangeStreamer.FetchReplica;
 import org.apache.cassandra.fql.FullQueryLogger;
 import org.apache.cassandra.fql.FullQueryLoggerOptions;
@@ -100,7 +101,6 @@ import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.commitlog.CommitLog;
 import org.apache.cassandra.db.compaction.CompactionManager;
-import org.apache.cassandra.db.compaction.Verifier;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.db.virtual.VirtualKeyspaceRegistry;
 import org.apache.cassandra.dht.*;
@@ -131,8 +131,6 @@ import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.schema.ViewMetadata;
 import org.apache.cassandra.service.snapshot.SnapshotManager;
 import org.apache.cassandra.service.snapshot.TableSnapshot;
-import org.apache.cassandra.net.AsyncOneResponse;
-import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.streaming.*;
 import org.apache.cassandra.tracing.TraceKeyspace;
 import org.apache.cassandra.transport.ClientResourceLimits;
@@ -3895,12 +3893,12 @@ public class StorageService extends NotificationBroadcasterSupport implements IE
     public int verify(boolean extendedVerify, boolean checkVersion, boolean diskFailurePolicy, boolean mutateRepairStatus, boolean checkOwnsTokens, boolean quick, String keyspaceName, String... tableNames) throws IOException, ExecutionException, InterruptedException
     {
         CompactionManager.AllSSTableOpStatus status = CompactionManager.AllSSTableOpStatus.SUCCESSFUL;
-        Verifier.Options options = Verifier.options().invokeDiskFailurePolicy(diskFailurePolicy)
-                                                     .extendedVerification(extendedVerify)
-                                                     .checkVersion(checkVersion)
-                                                     .mutateRepairStatus(mutateRepairStatus)
-                                                     .checkOwnsTokens(checkOwnsTokens)
-                                                     .quick(quick).build();
+        IVerifier.Options options = IVerifier.options().invokeDiskFailurePolicy(diskFailurePolicy)
+                                             .extendedVerification(extendedVerify)
+                                             .checkVersion(checkVersion)
+                                             .mutateRepairStatus(mutateRepairStatus)
+                                             .checkOwnsTokens(checkOwnsTokens)
+                                             .quick(quick).build();
         logger.info("Verifying {}.{} with options = {}", keyspaceName, Arrays.toString(tableNames), options);
         for (ColumnFamilyStore cfStore : getValidColumnFamilies(false, false, keyspaceName, tableNames))
         {

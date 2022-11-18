@@ -20,8 +20,12 @@ package org.apache.cassandra.io.sstable.format.big;
 import java.io.IOException;
 import java.util.Collection;
 
+import com.google.common.base.Preconditions;
+
+import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
+import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.format.*;
@@ -30,6 +34,7 @@ import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.schema.TableMetadataRef;
+import org.apache.cassandra.utils.OutputHandler;
 import org.apache.cassandra.utils.TimeUUID;
 
 /**
@@ -275,5 +280,12 @@ public class BigFormat implements SSTableFormat
         {
             return hasOldBfFormat;
         }
+    }
+
+    @Override
+    public IScrubber getScrubber(ColumnFamilyStore cfs, LifecycleTransaction transaction, boolean skipCorrupted, OutputHandler outputHandler, boolean checkData, boolean reinsertOverflowedTTLRows)
+    {
+        Preconditions.checkArgument(transaction.onlyOne().descriptor.formatType == getType());
+        return new Scrubber(cfs, transaction, skipCorrupted, outputHandler, checkData, reinsertOverflowedTTLRows);
     }
 }

@@ -35,6 +35,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.cassandra.io.sstable.format.IScrubber;
 import org.apache.cassandra.io.util.File;
 import org.apache.commons.lang3.StringUtils;
 
@@ -53,7 +54,7 @@ import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.compaction.OperationType;
-import org.apache.cassandra.db.compaction.Scrubber;
+import org.apache.cassandra.io.sstable.format.big.Scrubber;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.db.marshal.Int32Type;
@@ -83,6 +84,7 @@ import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.OutputHandler;
 import org.apache.cassandra.utils.TimeUUID;
 
 import static org.apache.cassandra.SchemaLoader.counterCFMD;
@@ -210,7 +212,7 @@ public class ScrubTest
 
         // with skipCorrupted == false, the scrub is expected to fail
         try (LifecycleTransaction txn = cfs.getTracker().tryModify(Collections.singletonList(sstable), OperationType.SCRUB);
-             Scrubber scrubber = new Scrubber(cfs, txn, false, true))
+             IScrubber scrubber = new Scrubber(cfs, txn, false, new OutputHandler.LogOutput(), true, false))
         {
             scrubber.scrub();
             fail("Expected a CorruptSSTableException to be thrown");
@@ -220,9 +222,9 @@ public class ScrubTest
         }
 
         // with skipCorrupted == true, the corrupt rows will be skipped
-        Scrubber.ScrubResult scrubResult;
+        IScrubber.ScrubResult scrubResult;
         try (LifecycleTransaction txn = cfs.getTracker().tryModify(Collections.singletonList(sstable), OperationType.SCRUB);
-             Scrubber scrubber = new Scrubber(cfs, txn, true, true))
+             IScrubber scrubber = new Scrubber(cfs, txn, true, new OutputHandler.LogOutput(), true, false))
         {
             scrubResult = scrubber.scrubWithResult();
         }
@@ -267,7 +269,7 @@ public class ScrubTest
 
         // with skipCorrupted == false, the scrub is expected to fail
         try (LifecycleTransaction txn = cfs.getTracker().tryModify(Collections.singletonList(sstable), OperationType.SCRUB);
-             Scrubber scrubber = new Scrubber(cfs, txn, false, true))
+             IScrubber scrubber = new Scrubber(cfs, txn, false, new OutputHandler.LogOutput(), true, false))
         {
             // with skipCorrupted == true, the corrupt row will be skipped
             scrubber.scrub();
@@ -278,7 +280,7 @@ public class ScrubTest
         }
 
         try (LifecycleTransaction txn = cfs.getTracker().tryModify(Collections.singletonList(sstable), OperationType.SCRUB);
-             Scrubber scrubber = new Scrubber(cfs, txn, true, true))
+             IScrubber scrubber = new Scrubber(cfs, txn, true, new OutputHandler.LogOutput(), true, false))
         {
             // with skipCorrupted == true, the corrupt row will be skipped
             scrubber.scrub();
@@ -419,7 +421,7 @@ public class ScrubTest
                 sstable.last = sstable.first;
 
             try (LifecycleTransaction scrubTxn = LifecycleTransaction.offline(OperationType.SCRUB, sstable);
-                 Scrubber scrubber = new Scrubber(cfs, scrubTxn, false, true))
+                 IScrubber scrubber = new Scrubber(cfs, scrubTxn, false, new OutputHandler.LogOutput(), true, false))
             {
                 scrubber.scrub();
             }

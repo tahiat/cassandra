@@ -41,6 +41,10 @@ import com.google.common.util.concurrent.Uninterruptibles;
 import org.apache.cassandra.concurrent.ExecutorFactory;
 import org.apache.cassandra.concurrent.WrappedExecutorPlus;
 import org.apache.cassandra.dht.AbstractBounds;
+import org.apache.cassandra.io.sstable.IVerifier;
+import org.apache.cassandra.io.sstable.format.IScrubber;
+import org.apache.cassandra.io.sstable.format.big.Scrubber;
+import org.apache.cassandra.io.sstable.format.big.Verifier;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.locator.RangesAtEndpoint;
 import org.slf4j.Logger;
@@ -496,7 +500,7 @@ public class CompactionManager implements CompactionManagerMBean
             @Override
             public void execute(LifecycleTransaction input)
             {
-                verifyOne(cfs, input.onlyOne(), options, active);
+                verifyOne(input.onlyOne(), options, active);
             }
         }, 0, OperationType.VERIFY);
     }
@@ -1251,7 +1255,7 @@ public class CompactionManager implements CompactionManagerMBean
     {
         CompactionInfo.Holder scrubInfo = null;
 
-        try (Scrubber scrubber = new Scrubber(cfs, modifier, skipCorrupted, checkData, reinsertOverflowedTTL))
+        try (IScrubber scrubber = new Scrubber(cfs, modifier, skipCorrupted, new OutputHandler.LogOutput(), checkData, reinsertOverflowedTTL))
         {
             scrubInfo = scrubber.getScrubInfo();
             activeCompactions.beginCompaction(scrubInfo);
@@ -1265,11 +1269,11 @@ public class CompactionManager implements CompactionManagerMBean
     }
 
     @VisibleForTesting
-    void verifyOne(ColumnFamilyStore cfs, SSTableReader sstable, Verifier.Options options, ActiveCompactionsTracker activeCompactions)
+    void verifyOne(SSTableReader sstable, Verifier.Options options, ActiveCompactionsTracker activeCompactions)
     {
         CompactionInfo.Holder verifyInfo = null;
 
-        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
+        try (IVerifier verifier = sstable.getVerifier(new OutputHandler.LogOutput(), false, options))
         {
             verifyInfo = verifier.getVerifyInfo();
             activeCompactions.beginCompaction(verifyInfo);

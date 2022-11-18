@@ -35,6 +35,7 @@ import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.io.sstable.format.big.Verifier;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.tools.ToolRunner.ToolResult;
@@ -47,7 +48,7 @@ import static org.junit.Assert.assertEquals;
 /**
  * Class that tests tables for {@link StandaloneVerifier} by updating using {@link SchemaLoader}
  * Similar in vein to other {@link SchemaLoader} type tests, as well as {@link StandaloneUpgraderOnSStablesTest}.
- * Since the tool mainly exercises the {@link org.apache.cassandra.db.compaction.Verifier}, we elect to
+ * Since the tool mainly exercises the {@link Verifier}, we elect to
  * not run every conceivable option as many tests are already covered by {@link org.apache.cassandra.db.VerifyTest}.
  * 
  * Note: the complete coverage is composed of:

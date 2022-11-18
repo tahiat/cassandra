@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.cassandra.db.compaction;
+package org.apache.cassandra.io.sstable.format.big;
 
 import java.io.IOError;
 import java.io.IOException;
@@ -30,7 +30,11 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 
-import org.apache.cassandra.io.sstable.format.big.RowIndexEntry;
+import org.apache.cassandra.db.compaction.CompactionInfo;
+import org.apache.cassandra.db.compaction.CompactionInterruptedException;
+import org.apache.cassandra.db.compaction.CompactionManager;
+import org.apache.cassandra.db.compaction.OperationType;
+import org.apache.cassandra.io.sstable.format.IScrubber;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.db.*;
@@ -50,7 +54,7 @@ import org.apache.cassandra.utils.memory.HeapCloner;
 
 import static org.apache.cassandra.utils.TimeUUID.Generator.nextTimeUUID;
 
-public class Scrubber implements Closeable
+public class Scrubber implements IScrubber
 {
     private final ColumnFamilyStore cfs;
     private final SSTableReader sstable;
@@ -85,17 +89,6 @@ public class Scrubber implements Closeable
 
     private static final Comparator<Partition> partitionComparator = Comparator.comparing(Partition::partitionKey);
     private final SortedSet<Partition> outOfOrder = new TreeSet<>(partitionComparator);
-
-    public Scrubber(ColumnFamilyStore cfs, LifecycleTransaction transaction, boolean skipCorrupted, boolean checkData)
-    {
-        this(cfs, transaction, skipCorrupted, checkData, false);
-    }
-
-    public Scrubber(ColumnFamilyStore cfs, LifecycleTransaction transaction, boolean skipCorrupted, boolean checkData,
-                    boolean reinsertOverflowedTTLRows)
-    {
-        this(cfs, transaction, skipCorrupted, new OutputHandler.LogOutput(), checkData, reinsertOverflowedTTLRows);
-    }
 
     @SuppressWarnings("resource")
     public Scrubber(ColumnFamilyStore cfs,
@@ -172,6 +165,7 @@ public class Scrubber implements Closeable
         }
     }
 
+    @Override
     public void scrub()
     {
         List<SSTableReader> finished = new ArrayList<>();
@@ -471,6 +465,7 @@ public class Scrubber implements Closeable
         }
     }
 
+    @Override
     public void close()
     {
         fileAccessLock.writeLock().lock();
@@ -485,6 +480,7 @@ public class Scrubber implements Closeable
         }
     }
 
+    @Override
     public CompactionInfo.Holder getScrubInfo()
     {
         return scrubInfo;
@@ -534,25 +530,12 @@ public class Scrubber implements Closeable
         }
     }
 
+    @Override
     @VisibleForTesting
     public ScrubResult scrubWithResult()
     {
         scrub();
-        return new ScrubResult(this);
-    }
-
-    public static final class ScrubResult
-    {
-        public final int goodPartitions;
-        public final int badPartitions;
-        public final int emptyPartitions;
-
-        public ScrubResult(Scrubber scrubber)
-        {
-            this.goodPartitions = scrubber.goodPartitions;
-            this.badPartitions = scrubber.badPartitions;
-            this.emptyPartitions = scrubber.emptyPartitions;
-        }
+        return new ScrubResult(goodPartitions, badPartitions, emptyPartitions);
     }
 
     public class NegativeLocalDeletionInfoMetrics

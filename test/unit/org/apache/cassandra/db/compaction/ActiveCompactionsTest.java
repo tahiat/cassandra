@@ -48,6 +48,7 @@ import org.apache.cassandra.index.Index;
 import org.apache.cassandra.index.SecondaryIndexBuilder;
 import org.apache.cassandra.io.sstable.IndexSummaryRedistribution;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.io.sstable.format.big.Verifier;
 import org.apache.cassandra.schema.TableId;
 import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.utils.FBUtilities;
@@ -214,7 +215,7 @@ public class ActiveCompactionsTest extends CQLTester
 
         SSTableReader sstable = Iterables.getFirst(getCurrentColumnFamilyStore().getLiveSSTables(), null);
         MockActiveCompactions mockActiveCompactions = new MockActiveCompactions();
-        CompactionManager.instance.verifyOne(getCurrentColumnFamilyStore(), sstable, new Verifier.Options.Builder().build(), mockActiveCompactions);
+        CompactionManager.instance.verifyOne(sstable, new Verifier.Options.Builder().build(), mockActiveCompactions);
         assertTrue(mockActiveCompactions.finished);
         assertEquals(mockActiveCompactions.holder.getCompactionInfo().getSSTables(), Sets.newHashSet(sstable));
         assertFalse(mockActiveCompactions.holder.getCompactionInfo().shouldStop((s) -> false));
