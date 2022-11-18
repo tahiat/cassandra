@@ -36,7 +36,6 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.cql3.statements.schema.CreateTableStatement;
 import org.apache.cassandra.db.*;
-import org.apache.cassandra.db.columniterator.AbstractSSTableIterator;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.LongType;
 import org.apache.cassandra.db.partitions.ImmutableBTreePartition;
@@ -787,7 +786,7 @@ public class RowIndexEntryTest extends CQLTester
             }
         };
         
-        AbstractSSTableIterator.IndexState indexState = new AbstractSSTableIterator.IndexState(
+        IndexState indexState = new IndexState(
             null, comp, rie, false, null                                                                                              
         );
         
@@ -801,7 +800,7 @@ public class RowIndexEntryTest extends CQLTester
         assertEquals(3, indexState.indexFor(cn(100L), 2));
         assertEquals(3, indexState.indexFor(cn(100L), 3));
 
-        indexState = new AbstractSSTableIterator.IndexState(
+        indexState = new IndexState(
             null, comp, rie, true, null
         );
 
