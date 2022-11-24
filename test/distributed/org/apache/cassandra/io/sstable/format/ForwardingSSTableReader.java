@@ -168,12 +168,6 @@ public abstract class ForwardingSSTableReader extends SSTableReader
     }
 
     @Override
-    public void releaseSummary()
-    {
-        delegate.releaseSummary();
-    }
-
-    @Override
     public long getIndexScanPosition(PartitionPosition key)
     {
         return delegate.getIndexScanPosition(key);
@@ -669,6 +663,12 @@ public abstract class ForwardingSSTableReader extends SSTableReader
     public Ref<SSTableReader> ref()
     {
         return delegate.ref();
+    }
+
+    @Override
+    protected List<AutoCloseable> setupInstance(boolean trackHotness)
+    {
+        return delegate.setupInstance(trackHotness);
     }
 
     @Override
