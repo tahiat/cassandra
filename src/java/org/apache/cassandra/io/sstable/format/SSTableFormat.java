@@ -17,17 +17,20 @@
  */
 package org.apache.cassandra.io.sstable.format;
 
+import java.util.List;
+
 import com.google.common.base.CharMatcher;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
+import org.apache.cassandra.io.sstable.GaugeProvider;
 import org.apache.cassandra.io.sstable.format.big.BigFormat;
 import org.apache.cassandra.utils.OutputHandler;
 
 /**
  * Provides the accessors to data on disk.
  */
-public interface SSTableFormat
+public interface SSTableFormat<R extends SSTableReader, W extends SSTableWriter>
 {
     boolean enableSSTableDevelopmentTestMode = Boolean.getBoolean("cassandra.test.sstableformatdevelopment");
 
@@ -39,14 +42,20 @@ public interface SSTableFormat
     SSTableWriter.Factory getWriterFactory();
     SSTableReader.Factory getReaderFactory();
 
-    AbstractRowIndexEntry.KeyCacheValueSerializer<?, ?> getKeyCacheValueSerializer();
-
     IScrubber getScrubber(ColumnFamilyStore cfs,
                           LifecycleTransaction transaction,
                           boolean skipCorrupted,
                           OutputHandler outputHandler,
                           boolean checkData,
                           boolean reinsertOverflowedTTLRows);
+
+    AbstractRowIndexEntry.KeyCacheValueSerializer<?, ?> getKeyCacheValueSerializer();
+
+    R cast(SSTableReader sstr);
+
+    W cast(SSTableWriter sstw);
+
+    FormatSpecificMetricsProviders getFormatSpecificMetricsProviders();
 
     enum Type
     {
@@ -81,5 +90,10 @@ public interface SSTableFormat
 
             throw new IllegalArgumentException("No Type constant " + name);
         }
+    }
+
+    interface FormatSpecificMetricsProviders
+    {
+        List<GaugeProvider<?, ?>> getGaugeProviders();
     }
 }

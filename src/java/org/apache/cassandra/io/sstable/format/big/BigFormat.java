@@ -18,7 +18,11 @@
 package org.apache.cassandra.io.sstable.format.big;
 
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
 import com.google.common.base.Preconditions;
 
@@ -27,6 +31,7 @@ import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.GaugeProvider;
 import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.format.*;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
@@ -40,7 +45,7 @@ import org.apache.cassandra.utils.TimeUUID;
 /**
  * Legacy bigtable format
  */
-public class BigFormat implements SSTableFormat
+public class BigFormat implements SSTableFormat<BigTableReader, BigTableWriter>
 {
     public static final BigFormat instance = new BigFormat();
     public static final Version latestVersion = new BigVersion(BigVersion.current_version);
@@ -86,6 +91,24 @@ public class BigFormat implements SSTableFormat
     public AbstractRowIndexEntry.KeyCacheValueSerializer<BigTableReader, RowIndexEntry> getKeyCacheValueSerializer()
     {
         return KeyCacheValueSerializer.instance;
+    }
+
+    @Override
+    public BigTableReader cast(SSTableReader sstr)
+    {
+        return sstr == null ? null : (BigTableReader) sstr;
+    }
+
+    @Override
+    public BigTableWriter cast(SSTableWriter sstw)
+    {
+        return sstw == null ? null : (BigTableWriter) sstw;
+    }
+
+    @Override
+    public FormatSpecificMetricsProviders getFormatSpecificMetricsProviders()
+    {
+        return BigTableSpecificMetricsProviders.instance;
     }
 
     static class KeyCacheValueSerializer implements AbstractRowIndexEntry.KeyCacheValueSerializer<BigTableReader, RowIndexEntry>
@@ -287,5 +310,31 @@ public class BigFormat implements SSTableFormat
     {
         Preconditions.checkArgument(transaction.onlyOne().descriptor.formatType == getType());
         return new Scrubber(cfs, transaction, skipCorrupted, outputHandler, checkData, reinsertOverflowedTTLRows);
+    }
+
+    private static class BigTableGaugeProvider<T extends Number> extends GaugeProvider<T, BigTableReader>
+    {
+        public BigTableGaugeProvider(String name, T neutralValue, Function<BigTableReader, T> extractor, BiFunction<T, T, T> combiner)
+        {
+            super(BigFormat.instance, name, neutralValue, extractor, combiner);
+        }
+    }
+
+    private static class BigTableSpecificMetricsProviders implements FormatSpecificMetricsProviders
+    {
+        private final static BigTableSpecificMetricsProviders instance = new BigTableSpecificMetricsProviders();
+
+        private final BigTableGaugeProvider<Long> indexSummaryOffHeapMemoryUsed = new BigTableGaugeProvider<>("IndexSummaryOffHeapMemoryUsed",
+                                                                                                              0L,
+                                                                                                              SSTableReader::getIndexSummaryOffHeapSize,
+                                                                                                              Long::sum);
+
+        private final List<GaugeProvider<?, ?>> gaugeProviders = Arrays.asList(indexSummaryOffHeapMemoryUsed);
+
+        @Override
+        public List<GaugeProvider<?, ?>> getGaugeProviders()
+        {
+            return gaugeProviders;
+        }
     }
 }
