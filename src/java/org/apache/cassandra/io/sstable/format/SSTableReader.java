@@ -1684,26 +1684,9 @@ public abstract class SSTableReader extends SSTable implements UnfilteredSource,
         return dfile.createReader();
     }
 
-    public RandomAccessReader openIndexReader()
-    {
-        if (ifile != null)
-            return ifile.createReader();
-        return null;
-    }
-
     public ChannelProxy getDataChannel()
     {
         return dfile.channel;
-    }
-
-    public ChannelProxy getIndexChannel()
-    {
-        return ifile.channel;
-    }
-
-    public FileHandle getIndexFile()
-    {
-        return ifile;
     }
 
     /**
