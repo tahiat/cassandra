@@ -886,7 +886,7 @@ public class SSTableReaderTest
 
         expectedException.expect(CorruptSSTableException.class);
         expectedException.expectMessage("CompressionInfo.db");
-        SSTableReader.verifyCompressionInfoExistenceIfApplicable(desc, components);
+        desc.verifyCompressionInfoExistenceIfApplicable(components);
     }
 
     @Test
@@ -894,7 +894,7 @@ public class SSTableReaderTest
     {
         Descriptor desc = setUpForTestVerfiyCompressionInfoExistence();
         Set<Component> components = SSTable.discoverComponentsFor(desc);
-        SSTableReader.verifyCompressionInfoExistenceIfApplicable(desc, components);
+        desc.verifyCompressionInfoExistenceIfApplicable(components);
 
         // mark the toc file not readable in order to trigger the FSReadError
         File tocFile = new File(desc.filenameFor(Component.TOC));
@@ -902,7 +902,7 @@ public class SSTableReaderTest
 
         expectedException.expect(FSReadError.class);
         expectedException.expectMessage("TOC.txt");
-        SSTableReader.verifyCompressionInfoExistenceIfApplicable(desc, components);
+        desc.verifyCompressionInfoExistenceIfApplicable(components);
     }
 
     @Test
@@ -910,7 +910,7 @@ public class SSTableReaderTest
     {
         Descriptor desc = setUpForTestVerfiyCompressionInfoExistence();
         Set<Component> components = SSTable.discoverComponentsFor(desc);
-        SSTableReader.verifyCompressionInfoExistenceIfApplicable(desc, components);
+        desc.verifyCompressionInfoExistenceIfApplicable(components);
     }
 
     private Descriptor setUpForTestVerfiyCompressionInfoExistence()
