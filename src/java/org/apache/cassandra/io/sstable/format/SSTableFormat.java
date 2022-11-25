@@ -18,11 +18,13 @@
 package org.apache.cassandra.io.sstable.format;
 
 import java.util.List;
+import java.util.Set;
 
 import com.google.common.base.CharMatcher;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
+import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.GaugeProvider;
 import org.apache.cassandra.io.sstable.format.big.BigFormat;
 import org.apache.cassandra.utils.OutputHandler;
@@ -41,6 +43,16 @@ public interface SSTableFormat<R extends SSTableReader, W extends SSTableWriter>
 
     SSTableWriter.Factory getWriterFactory();
     SSTableReader.Factory getReaderFactory();
+
+    Set<Component> streamingComponents();
+
+    Set<Component> primaryComponents();
+
+    Set<Component> batchComponents();
+
+    Set<Component> uploadComponents();
+
+    Set<Component> mutableComponents();
 
     IScrubber getScrubber(ColumnFamilyStore cfs,
                           LifecycleTransaction transaction,

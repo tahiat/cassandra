@@ -21,15 +21,18 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
+import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.GaugeProvider;
 import org.apache.cassandra.io.sstable.SSTable;
@@ -51,6 +54,34 @@ public class BigFormat implements SSTableFormat<BigTableReader, BigTableWriter>
     public static final Version latestVersion = new BigVersion(BigVersion.current_version);
     private static final SSTableReader.Factory readerFactory = new ReaderFactory();
     private static final SSTableWriter.Factory writerFactory = new WriterFactory();
+
+    private static final Set<Component> STREAM_COMPONENTS = ImmutableSet.of(Component.DATA,
+                                                                            Component.PRIMARY_INDEX,
+                                                                            Component.STATS,
+                                                                            Component.COMPRESSION_INFO,
+                                                                            Component.FILTER,
+                                                                            Component.SUMMARY,
+                                                                            Component.DIGEST,
+                                                                            Component.CRC);
+
+    private static final Set<Component> PRIMARY_COMPONENTS = ImmutableSet.of(Component.DATA,
+                                                                             Component.PRIMARY_INDEX);
+
+    private static final Set<Component> BATCH_COMPONENTS = ImmutableSet.of(Component.DATA,
+                                                                           Component.PRIMARY_INDEX,
+                                                                           Component.COMPRESSION_INFO,
+                                                                           Component.FILTER,
+                                                                           Component.STATS);
+
+    private static final Set<Component> UPLOAD_COMPONENTS = ImmutableSet.of(Component.DATA,
+                                                                            Component.PRIMARY_INDEX,
+                                                                            Component.SUMMARY,
+                                                                            Component.COMPRESSION_INFO,
+                                                                            Component.STATS);
+
+    private static final Set<Component> MUTABLE_COMPONENTS = ImmutableSet.of(Component.STATS,
+                                                                             Component.SUMMARY);
+
 
     private BigFormat()
     {
@@ -109,6 +140,36 @@ public class BigFormat implements SSTableFormat<BigTableReader, BigTableWriter>
     public FormatSpecificMetricsProviders getFormatSpecificMetricsProviders()
     {
         return BigTableSpecificMetricsProviders.instance;
+    }
+
+    @Override
+    public Set<Component> streamingComponents()
+    {
+        return STREAM_COMPONENTS;
+    }
+
+    @Override
+    public Set<Component> primaryComponents()
+    {
+        return PRIMARY_COMPONENTS;
+    }
+
+    @Override
+    public Set<Component> batchComponents()
+    {
+        return BATCH_COMPONENTS;
+    }
+
+    @Override
+    public Set<Component> uploadComponents()
+    {
+        return UPLOAD_COMPONENTS;
+    }
+
+    @Override
+    public Set<Component> mutableComponents()
+    {
+        return MUTABLE_COMPONENTS;
     }
 
     static class KeyCacheValueSerializer implements AbstractRowIndexEntry.KeyCacheValueSerializer<BigTableReader, RowIndexEntry>
