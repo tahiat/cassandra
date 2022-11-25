@@ -81,11 +81,11 @@ public class IndexSummaryRedistribution extends CompactionInfo.Holder
         this.compactionId = nextTimeUUID();
     }
 
-    private static <T extends SSTableReader & IndexSummarySupport> List<T> getIndexSummarySupportingAndCloseOthers(LifecycleTransaction txn) {
+    private static <T extends SSTableReader & IndexSummarySupport<T>> List<T> getIndexSummarySupportingAndCloseOthers(LifecycleTransaction txn) {
         List<T> filtered = new ArrayList<>();
         for (SSTableReader sstable : txn.originals())
         {
-            if (sstable instanceof IndexSummarySupport)
+            if (sstable instanceof IndexSummarySupport<?>)
                 filtered.add((T) sstable);
             else
                 txn.cancel(sstable);
@@ -93,7 +93,7 @@ public class IndexSummaryRedistribution extends CompactionInfo.Holder
         return filtered;
     }
 
-    public <T extends SSTableReader & IndexSummarySupport> List<T> redistributeSummaries() throws IOException
+    public <T extends SSTableReader & IndexSummarySupport<T>> List<T> redistributeSummaries() throws IOException
     {
         long start = nanoTime();
         logger.info("Redistributing index summaries");
@@ -153,7 +153,7 @@ public class IndexSummaryRedistribution extends CompactionInfo.Holder
         return newSSTables;
     }
 
-    private <T extends SSTableReader & IndexSummarySupport> List<T> adjustSamplingLevels(List<T> sstables,
+    private <T extends SSTableReader & IndexSummarySupport<T>> List<T> adjustSamplingLevels(List<T> sstables,
                                                                                          Map<TableId, LifecycleTransaction> transactions,
                                                                                          double totalReadsPerSec,
                                                                                          long memoryPoolCapacity) throws IOException
@@ -278,7 +278,7 @@ public class IndexSummaryRedistribution extends CompactionInfo.Holder
             long oldSize = sstable.bytesOnDisk();
             long oldSizeUncompressed = sstable.logicalBytesOnDisk();
 
-            T replacement = (T) sstable.cloneWithNewSummarySamplingLevel(cfs, entry.newSamplingLevel);
+            T replacement = sstable.cloneWithNewSummarySamplingLevel(cfs, entry.newSamplingLevel);
             long newSize = replacement.bytesOnDisk();
             long newSizeUncompressed = replacement.logicalBytesOnDisk();
 
@@ -321,7 +321,7 @@ public class IndexSummaryRedistribution extends CompactionInfo.Holder
     }
 
     @VisibleForTesting
-    static <T extends SSTableReader & IndexSummarySupport> Pair<List<T>, List<ResampleEntry<T>>> distributeRemainingSpace(List<ResampleEntry<T>> toDownsample, long remainingSpace)
+    static <T extends SSTableReader & IndexSummarySupport<T>> Pair<List<T>, List<ResampleEntry<T>>> distributeRemainingSpace(List<ResampleEntry<T>> toDownsample, long remainingSpace)
     {
         // sort by the amount of space regained by doing the downsample operation; we want to try to avoid operations
         // that will make little difference.
@@ -388,7 +388,7 @@ public class IndexSummaryRedistribution extends CompactionInfo.Holder
         }
     }
 
-    private static class ResampleEntry<T extends SSTableReader & IndexSummarySupport>
+    private static class ResampleEntry<T extends SSTableReader & IndexSummarySupport<T>>
     {
         public final T sstable;
         public final long newSpaceUsed;
