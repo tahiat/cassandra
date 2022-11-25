@@ -24,6 +24,7 @@ import java.util.regex.Pattern;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.common.base.Splitter;
+import com.google.common.collect.ImmutableSet;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -175,7 +176,7 @@ public class Descriptor
         return buff.toString();
     }
 
-    public SSTableFormat getFormat()
+    public SSTableFormat<?, ?> getFormat()
     {
         return formatType.info;
     }
@@ -191,6 +192,22 @@ public class Descriptor
             ret.add(tmpFile);
 
         return ret;
+    }
+
+    /**
+     * Returns the set of components consisting of the provided mandatory components and those optional components
+     * for which the corresponding file exists.
+     */
+    public Set<Component> getComponents(Set<Component> mandatory, Set<Component> optional)
+    {
+        ImmutableSet.Builder<Component> builder = ImmutableSet.builder();
+        builder.addAll(mandatory);
+        for (Component component : optional)
+        {
+            if (fileFor(component).exists())
+                builder.add(component);
+        }
+        return builder.build();
     }
 
     public static boolean isValidFile(File file)

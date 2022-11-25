@@ -50,6 +50,16 @@ public interface SSTableFormat<R extends SSTableReader, W extends SSTableWriter>
      */
     Set<Component> allComponents();
 
+    Set<Component> streamingComponents();
+
+    Set<Component> primaryComponents();
+
+    Set<Component> batchComponents();
+
+    Set<Component> uploadComponents();
+
+    Set<Component> mutableComponents();
+
     boolean cachesKeys();
     AbstractRowIndexEntry.KeyCacheValueSerializer<?, ?> getKeyCacheValueSerializer();
 

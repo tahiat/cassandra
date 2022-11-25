@@ -21,9 +21,9 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.Set;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
@@ -82,6 +82,33 @@ public class BigFormat implements SSTableFormat<BigTableReader, BigTableWriter>
                                                                          CRC,
                                                                          TOC);
 
+    private static final Set<Component> STREAM_COMPONENTS = ImmutableSet.of(DATA,
+                                                                            PRIMARY_INDEX,
+                                                                            STATS,
+                                                                            COMPRESSION_INFO,
+                                                                            FILTER,
+                                                                            SUMMARY,
+                                                                            DIGEST,
+                                                                            CRC);
+
+    private static final Set<Component> PRIMARY_COMPONENTS = ImmutableSet.of(DATA,
+                                                                             PRIMARY_INDEX);
+
+    private static final Set<Component> BATCH_COMPONENTS = ImmutableSet.of(DATA,
+                                                                           PRIMARY_INDEX,
+                                                                           COMPRESSION_INFO,
+                                                                           FILTER,
+                                                                           STATS);
+
+    private static final Set<Component> UPLOAD_COMPONENTS = ImmutableSet.of(DATA,
+                                                                            PRIMARY_INDEX,
+                                                                            SUMMARY,
+                                                                            COMPRESSION_INFO,
+                                                                            STATS);
+
+    private static final Set<Component> MUTABLE_COMPONENTS = ImmutableSet.of(STATS,
+                                                                             SUMMARY);
+
     private BigFormat()
     {
 
@@ -121,6 +148,36 @@ public class BigFormat implements SSTableFormat<BigTableReader, BigTableWriter>
     public Set<Component> allComponents()
     {
         return ALL_COMPONENTS;
+    }
+
+    @Override
+    public Set<Component> streamingComponents()
+    {
+        return STREAM_COMPONENTS;
+    }
+
+    @Override
+    public Set<Component> primaryComponents()
+    {
+        return PRIMARY_COMPONENTS;
+    }
+
+    @Override
+    public Set<Component> batchComponents()
+    {
+        return BATCH_COMPONENTS;
+    }
+
+    @Override
+    public Set<Component> uploadComponents()
+    {
+        return UPLOAD_COMPONENTS;
+    }
+
+    @Override
+    public Set<Component> mutableComponents()
+    {
+        return MUTABLE_COMPONENTS;
     }
 
     @Override
