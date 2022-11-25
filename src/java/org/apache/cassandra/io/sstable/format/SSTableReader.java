@@ -217,7 +217,6 @@ public abstract class SSTableReader extends SSTable implements UnfilteredSource,
     protected final FileHandle ifile;
     protected final FileHandle dfile;
     protected final IFilter bf;
-    public final IndexSummary indexSummary;
 
     protected InstrumentingCache<KeyCacheKey, AbstractRowIndexEntry> keyCache;
 
@@ -629,7 +628,6 @@ public abstract class SSTableReader extends SSTable implements UnfilteredSource,
              builder.statsMetadata,
              builder.openReason,
              builder.header,
-             builder.summary,
              builder.dfile,
              builder.ifile,
              builder.bf);
@@ -642,7 +640,6 @@ public abstract class SSTableReader extends SSTable implements UnfilteredSource,
                             StatsMetadata sstableMetadata,
                             OpenReason openReason,
                             SerializationHeader header,
-                            IndexSummary summary,
                             FileHandle dfile,
                             FileHandle ifile,
                             IFilter bf)
@@ -650,7 +647,6 @@ public abstract class SSTableReader extends SSTable implements UnfilteredSource,
         super(desc, components, metadata, DatabaseDescriptor.getDiskOptimizationStrategy());
         this.sstableMetadata = sstableMetadata;
         this.header = header;
-        this.indexSummary = summary;
         this.dfile = dfile;
         this.ifile = ifile;
         this.bf = bf;
