@@ -126,15 +126,15 @@ public abstract class ForwardingSSTableReader extends SSTableReader
     }
 
     @Override
-    public SSTableReader cloneWithNewStart(DecoratedKey newStart, Runnable runOnClose)
+    public SSTableReader cloneWithNewStart(DecoratedKey newStart)
     {
-        return delegate.cloneWithNewStart(newStart, runOnClose);
+        return delegate.cloneWithNewStart(newStart);
     }
 
     @Override
-    public SSTableReader cloneWithNewSummarySamplingLevel(ColumnFamilyStore parent, int samplingLevel) throws IOException
+    public SSTableReader cloneAndReplace(IFilter newBloomFilter)
     {
-        return delegate.cloneWithNewSummarySamplingLevel(parent, samplingLevel);
+        return delegate.cloneAndReplace(newBloomFilter);
     }
 
     @Override
@@ -147,12 +147,6 @@ public abstract class ForwardingSSTableReader extends SSTableReader
     public void releaseInMemoryComponents()
     {
         delegate.releaseInMemoryComponents();
-    }
-
-    @Override
-    public long getIndexScanPosition(PartitionPosition key)
-    {
-        return delegate.getIndexScanPosition(key);
     }
 
     @Override
