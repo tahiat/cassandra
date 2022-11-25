@@ -38,6 +38,7 @@ import com.google.common.collect.*;
 import com.google.common.util.concurrent.RateLimiter;
 import com.google.common.util.concurrent.Uninterruptibles;
 
+import net.openhft.chronicle.core.util.ThrowingSupplier;
 import org.apache.cassandra.concurrent.ExecutorFactory;
 import org.apache.cassandra.concurrent.WrappedExecutorPlus;
 import org.apache.cassandra.dht.AbstractBounds;
@@ -1902,22 +1903,17 @@ public class CompactionManager implements CompactionManagerMBean
         return executor.submitIfRunning(runnable, "cache write");
     }
 
-    public List<SSTableReader> runIndexSummaryRedistribution(IndexSummaryRedistribution redistribution) throws IOException
+    public <T, E extends Throwable> T runWithActiveCompactions(Holder holder, ThrowingSupplier<T, E> callable) throws E
     {
-        return runIndexSummaryRedistribution(redistribution, active);
-    }
-
-    @VisibleForTesting
-    List<SSTableReader> runIndexSummaryRedistribution(IndexSummaryRedistribution redistribution, ActiveCompactionsTracker activeCompactions) throws IOException
-    {
-        activeCompactions.beginCompaction(redistribution);
+        ActiveCompactionsTracker tracker = active;
+        active.beginCompaction(holder);
         try
         {
-            return redistribution.redistributeSummaries();
+            return callable.get();
         }
         finally
         {
-            activeCompactions.finishCompaction(redistribution);
+            tracker.finishCompaction(holder);
         }
     }
 
