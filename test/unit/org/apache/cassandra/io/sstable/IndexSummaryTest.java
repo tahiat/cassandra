@@ -33,6 +33,7 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.RandomPartitioner;
+import org.apache.cassandra.io.util.DataInputPlus.DataInputStreamPlus;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -223,7 +224,7 @@ public class IndexSummaryTest
         dos.writeUTF("JUNK");
         dos.writeUTF("JUNK");
         FileUtils.closeQuietly(dos);
-        DataInputStream dis = new DataInputStream(new ByteArrayInputStream(dos.toByteArray()));
+        DataInputStreamPlus dis = new DataInputStreamPlus(new ByteArrayInputStream(dos.toByteArray()));
         IndexSummary is = IndexSummary.serializer.deserialize(dis, partitioner, 1, 1);
         for (int i = 0; i < 100; i++)
             assertEquals(i, is.binarySearch(random.left.get(i)));
@@ -249,7 +250,7 @@ public class IndexSummaryTest
 
             DataOutputBuffer dos = new DataOutputBuffer();
             IndexSummary.serializer.serialize(summary, dos);
-            DataInputStream dis = new DataInputStream(new ByteArrayInputStream(dos.toByteArray()));
+            DataInputStreamPlus dis = new DataInputStreamPlus(new ByteArrayInputStream(dos.toByteArray()));
             IndexSummary loaded = IndexSummary.serializer.deserialize(dis, p, 1, 1);
 
             assertEquals(1, loaded.size());

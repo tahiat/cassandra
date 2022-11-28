@@ -642,7 +642,11 @@ public class BigTableWriter extends SSTableWriter
             summary.prepareToCommit();
             try (IndexSummary indexSummary = summary.build(getPartitioner()))
             {
-                SSTableReaderBuilder.saveSummary(descriptor, first, last, indexSummary);
+                new IndexSummaryComponent(indexSummary, first, last).saveOrDeleteCorrupted(descriptor);
+            }
+            catch (IOException ex)
+            {
+                logger.warn("Failed to save index summary", ex);
             }
         }
 

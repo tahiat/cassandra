@@ -60,11 +60,10 @@ import org.apache.cassandra.utils.IFilter;
 import org.apache.cassandra.utils.OutputHandler;
 import org.apache.cassandra.utils.TimeUUID;
 
-import java.io.DataInputStream;
 import java.io.IOError;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -491,19 +490,9 @@ public class Verifier implements IVerifier
 
     private void deserializeIndexSummary(SSTableReader sstable) throws IOException
     {
-        File file = new File(sstable.descriptor.filenameFor(Component.SUMMARY));
-        TableMetadata metadata = cfs.metadata();
-        try (DataInputStream iStream = new DataInputStream(Files.newInputStream(file.toPath())))
-        {
-            try (IndexSummary indexSummary = IndexSummary.serializer.deserialize(iStream,
-                                                               cfs.getPartitioner(),
-                                                               metadata.params.minIndexInterval,
-                                                               metadata.params.maxIndexInterval))
-            {
-                ByteBufferUtil.readWithLength(iStream);
-                ByteBufferUtil.readWithLength(iStream);
-            }
-        }
+        IndexSummaryComponent summaryComponent = IndexSummaryComponent.load(sstable.descriptor, cfs.metadata());
+        if (summaryComponent == null)
+            throw new NoSuchFileException("Index summary component of sstable " + sstable.descriptor.baseFilename() + " is missing");
     }
 
     private void deserializeBloomFilter(SSTableReader sstable) throws IOException
