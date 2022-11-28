@@ -17,6 +17,10 @@
  */
 package org.apache.cassandra.utils;
 
+import java.io.IOException;
+import java.io.OutputStream;
+
+import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.utils.concurrent.Ref;
 
 public class AlwaysPresentFilter implements IFilter
@@ -46,7 +50,13 @@ public class AlwaysPresentFilter implements IFilter
     {
     }
 
-    public long serializedSize() { return 0; }
+    public long serializedSize(boolean oldSerializationFormat) { return 0; }
+
+    @Override
+    public <O extends OutputStream & DataOutputPlus> void serialize(O out, boolean oldSerializationFormat) throws IOException
+    {
+        // no-op
+    }
 
     @Override
     public long offHeapSize()
