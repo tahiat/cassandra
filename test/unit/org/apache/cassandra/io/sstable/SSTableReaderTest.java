@@ -54,8 +54,8 @@ import org.apache.cassandra.index.Index;
 import org.apache.cassandra.io.FSReadError;
 import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
-import org.apache.cassandra.io.sstable.format.SSTableReaderBuilder;
 import org.apache.cassandra.io.sstable.format.big.BigTableReader;
+import org.apache.cassandra.io.sstable.format.big.IndexSummaryComponent;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.io.util.MmappedRegions;
@@ -550,7 +550,7 @@ public class SSTableReaderTest
     }
 
     @Test
-    public void testLoadingSummaryUsesCorrectPartitioner()
+    public void testLoadingSummaryUsesCorrectPartitioner() throws Exception
     {
         ColumnFamilyStore store = discardSSTables(KEYSPACE1, CF_INDEXED);
 
@@ -570,7 +570,7 @@ public class SSTableReaderTest
 
             if (sstable instanceof IndexSummarySupport<?>)
             {
-                SSTableReaderBuilder.saveSummary(sstable.descriptor, sstable.first, sstable.last, ((IndexSummarySupport<?>) sstable).getIndexSummary());
+                new IndexSummaryComponent(((IndexSummarySupport<?>) sstable).getIndexSummary(), sstable.first, sstable.last).save(sstable.descriptor, true);
                 SSTableReader reopened = SSTableReader.open(sstable.descriptor);
                 assert reopened.first.getToken() instanceof LocalToken;
                 reopened.selfRef().release();
