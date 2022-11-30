@@ -488,7 +488,7 @@ public class SSTableReaderTest
         target.selfRef().release();
 
         // check that bloomfilter/summary ARE NOT regenerated and BF=AlwaysPresent when filter component is missing
-        Set<Component> components = SSTable.discoverComponentsFor(desc);
+        Set<Component> components = desc.discoverComponents();
         components.remove(Component.FILTER);
         target = SSTableReader.openNoValidation(desc, components, store);
 
@@ -508,7 +508,7 @@ public class SSTableReaderTest
         target.selfRef().release();
 
         // check that bloomfilter is recreated when it doesn't exist and this causes the summary to be recreated
-        components = SSTable.discoverComponentsFor(desc);
+        components = desc.discoverComponents();
         components.remove(Component.FILTER);
 
         target = SSTableReader.open(desc, components, store.metadata);
@@ -882,7 +882,7 @@ public class SSTableReaderTest
         assertFalse("CompressionInfo file should not exist", compressionInfoFile.exists());
 
         // discovert the components on disk after deletion
-        Set<Component> components = SSTable.discoverComponentsFor(desc);
+        Set<Component> components = desc.discoverComponents();
 
         expectedException.expect(CorruptSSTableException.class);
         expectedException.expectMessage("CompressionInfo.db");
@@ -893,7 +893,7 @@ public class SSTableReaderTest
     public void testVerifyCompressionInfoExistenceWhenTOCUnableToOpen()
     {
         Descriptor desc = setUpForTestVerfiyCompressionInfoExistence();
-        Set<Component> components = SSTable.discoverComponentsFor(desc);
+        Set<Component> components = desc.discoverComponents();
         desc.verifyCompressionInfoExistenceIfApplicable(components);
 
         // mark the toc file not readable in order to trigger the FSReadError
@@ -909,7 +909,7 @@ public class SSTableReaderTest
     public void testVerifyCompressionInfoExistencePasses()
     {
         Descriptor desc = setUpForTestVerfiyCompressionInfoExistence();
-        Set<Component> components = SSTable.discoverComponentsFor(desc);
+        Set<Component> components = desc.discoverComponents();
         desc.verifyCompressionInfoExistenceIfApplicable(components);
     }
 
