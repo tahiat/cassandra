@@ -35,6 +35,7 @@ import org.apache.cassandra.utils.bytecomparable.ByteSource;
 import org.apache.cassandra.utils.bytecomparable.ByteSourceInverse;
 import org.apache.cassandra.utils.IFilter.FilterKey;
 import org.apache.cassandra.utils.MurmurHash;
+import org.apache.cassandra.utils.memory.HeapCloner;
 
 /**
  * Represents a decorated key, handy for certain operations
@@ -199,6 +200,17 @@ public abstract class DecoratedKey implements PartitionPosition, FilterKey
 
     public abstract ByteBuffer getKey();
     public abstract int getKeyLength();
+
+    /**
+     * If this key occupies only part of a larger buffer, allocate a new buffer that is only as large as necessary.
+     * Otherwise, it returns this key.
+     */
+    public DecoratedKey retainable()
+    {
+        return ByteBufferUtil.canMinimize(getKey())
+               ? new BufferDecoratedKey(getToken(), HeapCloner.instance.clone(getKey()))
+               : this;
+    }
 
     public void filterHash(long[] dest)
     {

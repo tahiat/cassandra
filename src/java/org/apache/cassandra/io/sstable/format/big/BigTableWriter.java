@@ -390,8 +390,8 @@ public class BigTableWriter extends SSTableWriter
                                                   header);
 
             // now it's open, find the ACTUAL last readable key (i.e. for which the data file has also been flushed)
-            sstable.first = getMinimalKey(first);
-            sstable.last = getMinimalKey(boundary.lastKey);
+            sstable.first = first.retainable();
+            sstable.last = boundary.lastKey.retainable();
             return sstable;
         }
         catch (Throwable t)
@@ -465,8 +465,8 @@ public class BigTableWriter extends SSTableWriter
                                                   stats,
                                                   openReason,
                                                   header);
-            sstable.first = getMinimalKey(first);
-            sstable.last = getMinimalKey(last);
+            sstable.first = first.retainable();
+            sstable.last = last.retainable();
             return sstable;
         }
         catch (Throwable t)

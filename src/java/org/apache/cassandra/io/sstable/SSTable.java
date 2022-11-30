@@ -31,7 +31,6 @@ import com.google.common.collect.ImmutableSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.db.BufferDecoratedKey;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.dht.IPartitioner;
@@ -47,7 +46,6 @@ import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.TimeUUID;
-import org.apache.cassandra.utils.memory.HeapCloner;
 
 import static org.apache.cassandra.service.ActiveRepairService.NO_PENDING_REPAIR;
 import static org.apache.cassandra.service.ActiveRepairService.UNREPAIRED_SSTABLE;
@@ -147,17 +145,6 @@ public abstract class SSTable
     public DecoratedKey decorateKey(ByteBuffer key)
     {
         return getPartitioner().decorateKey(key);
-    }
-
-    /**
-     * If the given @param key occupies only part of a larger buffer, allocate a new buffer that is only
-     * as large as necessary.
-     */
-    public static DecoratedKey getMinimalKey(DecoratedKey key)
-    {
-        return key.getKey().position() > 0 || key.getKey().hasRemaining() || !key.getKey().hasArray()
-                                       ? new BufferDecoratedKey(key.getToken(), HeapCloner.instance.clone(key.getKey()))
-                                       : key;
     }
 
     public String getFilename()
@@ -272,7 +259,6 @@ public abstract class SSTable
                "path='" + getFilename() + '\'' +
                ')';
     }
-
 
     /**
      * Registers new custom components. Used by custom compaction strategies.

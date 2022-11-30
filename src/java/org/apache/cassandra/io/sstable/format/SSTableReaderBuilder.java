@@ -207,8 +207,8 @@ public abstract class SSTableReaderBuilder
 
         if (!summaryLoaded)
         {
-            first = SSTable.getMinimalKey(first);
-            last = SSTable.getMinimalKey(last);
+            first = first.retainable();
+            last = last.retainable();
         }
     }
 
