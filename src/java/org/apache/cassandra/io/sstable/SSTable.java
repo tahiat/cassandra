@@ -31,6 +31,8 @@ import com.google.common.collect.ImmutableSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.config.Config;
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.BufferDecoratedKey;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.dht.AbstractBounds;
@@ -75,14 +77,18 @@ public abstract class SSTable
     public final Descriptor descriptor;
     protected final Set<Component> components;
     public final boolean compression;
+    public final double diskOptimizationEstimatePercentile;
+    public final Config.DiskAccessMode dataFileAccessMode;
 
     public DecoratedKey first;
     public DecoratedKey last;
 
-    protected final DiskOptimizationStrategy optimizationStrategy;
+    protected final DiskOptimizationStrategy diskOptimizationStrategy;
+
     protected final TableMetadataRef metadata;
 
-    protected SSTable(Descriptor descriptor, Set<Component> components, TableMetadataRef metadata, DiskOptimizationStrategy optimizationStrategy)
+    @Deprecated
+    protected SSTable(Descriptor descriptor, Set<Component> components, TableMetadataRef metadata, DiskOptimizationStrategy diskOptimizationStrategy)
     {
         // In almost all cases, metadata shouldn't be null, but allowing null allows to create a mostly functional SSTable without
         // full schema definition. SSTableLoader use that ability
@@ -94,7 +100,23 @@ public abstract class SSTable
         this.compression = dataComponents.contains(Component.COMPRESSION_INFO);
         this.components = new CopyOnWriteArraySet<>(dataComponents);
         this.metadata = metadata;
-        this.optimizationStrategy = Objects.requireNonNull(optimizationStrategy);
+        this.diskOptimizationStrategy = Objects.requireNonNull(diskOptimizationStrategy);
+        this.diskOptimizationEstimatePercentile = DatabaseDescriptor.getDiskOptimizationEstimatePercentile();
+        this.dataFileAccessMode = DatabaseDescriptor.getDiskAccessMode();
+    }
+
+    public SSTable(SSTableBuilder<?, ?> builder)
+    {
+        Preconditions.checkNotNull(builder.descriptor);
+        Preconditions.checkNotNull(builder.getComponents());
+
+        this.descriptor = builder.descriptor;
+        this.components = new CopyOnWriteArraySet<>(builder.getComponents());
+        this.compression = components.contains(Component.COMPRESSION_INFO);
+        this.metadata = builder.getTableMetadataRef();
+        this.diskOptimizationStrategy = builder.getDiskOptimizationStrategy();
+        this.diskOptimizationEstimatePercentile = builder.getDiskOptimizationEstimatePercentile();
+        this.dataFileAccessMode = builder.getDataFileAccessMode();
     }
 
     @VisibleForTesting

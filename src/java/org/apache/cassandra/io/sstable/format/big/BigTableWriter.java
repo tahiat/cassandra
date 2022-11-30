@@ -335,6 +335,15 @@ public class BigTableWriter extends SSTableWriter
         }
     }
 
+    private BigTableReaderBuilder readerBuilderStub()
+    {
+        return new BigTableReaderBuilder(descriptor).setComponents(components)
+                                                    .setTableMetadataRef(metadata)
+                                                    .setMaxDataAge(maxDataAge)
+                                                    .setSerializationHeader(header)
+                                                    .setFilter(iwriter.bf.sharedCopy());
+    }
+
     @SuppressWarnings("resource")
     public SSTableReader openEarly()
     {
@@ -355,7 +364,7 @@ public class BigTableWriter extends SSTableWriter
             // open the reader early
             indexSummary = iwriter.summary.build(metadata().partitioner, boundary);
             long indexFileLength = new File(descriptor.filenameFor(Component.PRIMARY_INDEX)).length();
-            int indexBufferSize = optimizationStrategy.bufferSize(indexFileLength / indexSummary.size());
+            int indexBufferSize = diskOptimizationStrategy.bufferSize(indexFileLength / indexSummary.size());
             ifile = iwriter.builder.bufferSize(indexBufferSize).withLengthOverride(boundary.indexLength).complete();
             FileHandle.Builder dbuilder = new FileHandle.Builder(descriptor.fileFor(Component.DATA));
             dbuilder.mmapped(DatabaseDescriptor.getDiskAccessMode() == Config.DiskAccessMode.mmap);
@@ -374,23 +383,18 @@ public class BigTableWriter extends SSTableWriter
                 partitionSizeHistogram.clearOverflow();
             }
 
-            int dataBufferSize = optimizationStrategy.bufferSize(partitionSizeHistogram.percentile(DatabaseDescriptor.getDiskOptimizationEstimatePercentile()));
+            int dataBufferSize = diskOptimizationStrategy.bufferSize(partitionSizeHistogram.percentile(DatabaseDescriptor.getDiskOptimizationEstimatePercentile()));
             dfile = dbuilder.bufferSize(dataBufferSize).withLengthOverride(boundary.dataLength).complete();
-
             invalidateCacheAtBoundary(dfile);
-            sstable = BigTableReader.internalOpen(descriptor,
-                                                  components, metadata,
-                                                  ifile, dfile,
-                                                  indexSummary,
-                                                  iwriter.bf.sharedCopy(),
-                                                  maxDataAge,
-                                                  stats,
-                                                  SSTableReader.OpenReason.EARLY,
-                                                  header);
-
-            // now it's open, find the ACTUAL last readable key (i.e. for which the data file has also been flushed)
-            sstable.first = getMinimalKey(first);
-            sstable.last = getMinimalKey(boundary.lastKey);
+            BigTableReaderBuilder builder = readerBuilderStub().setDataFile(dfile)
+                                                               .setIndexFile(ifile)
+                                                               .setIndexSummary(indexSummary)
+                                                               .setStatsMetadata(stats)
+                                                               .setOpenReason(SSTableReader.OpenReason.EARLY)
+                                                               .setFirst(first)
+                                                               .setLast(boundary.lastKey)
+                                                               .setOnline(true);
+            sstable = builder.build();
             return sstable;
         }
         catch (Throwable t)
@@ -440,8 +444,8 @@ public class BigTableWriter extends SSTableWriter
             // finalize in-memory state for the reader
             indexSummary = iwriter.summary.build(metadata().partitioner);
             long indexFileLength = new File(descriptor.filenameFor(Component.PRIMARY_INDEX)).length();
-            int dataBufferSize = optimizationStrategy.bufferSize(stats.estimatedPartitionSize.percentile(DatabaseDescriptor.getDiskOptimizationEstimatePercentile()));
-            int indexBufferSize = optimizationStrategy.bufferSize(indexFileLength / indexSummary.size());
+            int dataBufferSize = diskOptimizationStrategy.bufferSize(stats.estimatedPartitionSize.percentile(DatabaseDescriptor.getDiskOptimizationEstimatePercentile()));
+            int indexBufferSize = diskOptimizationStrategy.bufferSize(indexFileLength / indexSummary.size());
             ifile = iwriter.builder.bufferSize(indexBufferSize).complete();
 
             FileHandle.Builder dbuilder = new FileHandle.Builder(descriptor.fileFor(Component.DATA));
@@ -451,19 +455,16 @@ public class BigTableWriter extends SSTableWriter
                 dbuilder.withCompressionMetadata(((CompressedSequentialWriter) dataFile).open(0));
             dfile = dbuilder.bufferSize(dataBufferSize).complete();
             invalidateCacheAtBoundary(dfile);
-            sstable = BigTableReader.internalOpen(descriptor,
-                                                  components,
-                                                  metadata,
-                                                  ifile,
-                                                  dfile,
-                                                  indexSummary,
-                                                  iwriter.bf.sharedCopy(),
-                                                  maxDataAge,
-                                                  stats,
-                                                  openReason,
-                                                  header);
-            sstable.first = getMinimalKey(first);
-            sstable.last = getMinimalKey(last);
+            BigTableReaderBuilder builder = readerBuilderStub().setDataFile(dfile)
+                                                               .setIndexFile(ifile)
+                                                               .setIndexSummary(indexSummary)
+                                                               .setStatsMetadata(stats)
+                                                               .setOpenReason(openReason)
+                                                               .setFirst(getMinimalKey(first))
+                                                               .setLast(getMinimalKey(last))
+                                                               .setOnline(true);
+
+            sstable = builder.build();
             return sstable;
         }
         catch (Throwable t)
@@ -507,7 +508,6 @@ public class BigTableWriter extends SSTableWriter
             accumulate = iwriter.commit(accumulate);
             return accumulate;
         }
-
 
         protected Throwable doAbort(Throwable accumulate)
         {

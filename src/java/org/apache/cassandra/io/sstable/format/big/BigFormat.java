@@ -28,21 +28,16 @@ import java.util.function.Function;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.io.sstable.Component;
-import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.GaugeProvider;
 import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.format.*;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
-import org.apache.cassandra.io.sstable.metadata.MetadataType;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.net.MessagingService;
@@ -57,7 +52,7 @@ public class BigFormat implements SSTableFormat<BigTableReader, BigTableWriter>
 {
     public static final BigFormat instance = new BigFormat();
     public static final Version latestVersion = new BigVersion(BigVersion.current_version);
-    private static final SSTableReader.Factory readerFactory = new ReaderFactory();
+    private static final SSTableReader.Factory readerFactory = new BigTableReaderFactory();
     private static final SSTableWriter.Factory writerFactory = new WriterFactory();
 
     private static final Set<Component> STREAM_COMPONENTS = ImmutableSet.of(Component.DATA,
@@ -225,109 +220,6 @@ public class BigFormat implements SSTableFormat<BigTableReader, BigTableWriter>
         {
             SSTable.validateRepairedMetadata(repairedAt, pendingRepair, isTransient);
             return new BigTableWriter(descriptor, keyCount, repairedAt, pendingRepair, isTransient, metadata, metadataCollector, header, observers, lifecycleNewTracker);
-        }
-    }
-
-    static class ReaderFactory implements SSTableReader.Factory<BigTableReader>
-    {
-        private static final Logger logger = LoggerFactory.getLogger(ReaderFactory.class);
-
-        @Override
-        public BigTableReader open(SSTableReaderBuilder builder)
-        {
-            return new BigTableReader(builder);
-        }
-
-        @Override
-        public BigTableReader open(Descriptor descriptor, Set<Component> components, TableMetadataRef metadata, boolean validate, boolean isOffline)
-        {
-            // Minimum components without which we can't do anything
-            assert components.contains(Component.DATA) : "Data component is missing for sstable " + descriptor;
-            assert !validate || components.contains(Component.PRIMARY_INDEX) : "Primary index component is missing for sstable " + descriptor;
-
-            // For the 3.0+ sstable format, the (misnomed) stats component hold the serialization header which we need to deserialize the sstable content
-            assert components.contains(Component.STATS) : "Stats component is missing for sstable " + descriptor;
-
-            CompressionInfoComponent.verifyCompressionInfoExistenceIfApplicable(descriptor, components);
-
-            StatsComponent statsComponent;
-            try
-            {
-                statsComponent = StatsComponent.load(descriptor, MetadataType.VALIDATION, MetadataType.STATS, MetadataType.HEADER);
-            }
-            catch (Throwable t)
-            {
-                throw new CorruptSSTableException(t, descriptor.filenameFor(Component.STATS));
-            }
-            assert statsComponent.serializationHeader() != null;
-
-            // Check if sstable is created using same partitioner.
-            // Partitioner can be null, which indicates older version of sstable or no stats available.
-            // In that case, we skip the check.
-            String partitionerName = metadata.get().partitioner.getClass().getCanonicalName();
-            if (statsComponent.validationMetadata() != null && !partitionerName.equals(statsComponent.validationMetadata().partitioner))
-            {
-                logger.error("Cannot open {}; partitioner {} does not match system partitioner {}.  Note that the default partitioner starting with Cassandra 1.2 is Murmur3Partitioner, so you will need to edit that to match your old partitioner if upgrading.",
-                             descriptor, statsComponent.validationMetadata().partitioner, partitionerName);
-                System.exit(1);
-            }
-
-            BigTableReader sstable;
-            sstable = (BigTableReader) new SSTableReaderBuilder.ForRead(descriptor,
-                                                                        metadata,
-                                                                        statsComponent.validationMetadata(),
-                                                                        isOffline,
-                                                                        components,
-                                                                        statsComponent.statsMetadata(),
-                                                                        statsComponent.serializationHeader(metadata.get())).build();
-
-            try
-            {
-                if (validate)
-                    sstable.validate();
-
-                if (sstable.getKeyCache() != null)
-                    logger.trace("key cache contains {}/{} keys", sstable.getKeyCache().size(), sstable.getKeyCache().getCapacity());
-
-                return sstable;
-            }
-            catch (Throwable t)
-            {
-                sstable.selfRef().release();
-                throw new CorruptSSTableException(t, sstable.getFilename());
-            }
-        }
-
-        @Override
-        public BigTableReader openForBatch(Descriptor descriptor, Set<Component> components, TableMetadataRef metadata)
-        {
-            // Minimum components without which we can't do anything
-            assert components.contains(Component.DATA) : "Data component is missing for sstable " + descriptor;
-            assert components.contains(Component.PRIMARY_INDEX) : "Primary index component is missing for sstable " + descriptor;
-            CompressionInfoComponent.verifyCompressionInfoExistenceIfApplicable(descriptor, components);
-
-            StatsComponent statsComponent;
-            try
-            {
-                statsComponent = StatsComponent.load(descriptor, MetadataType.VALIDATION, MetadataType.STATS, MetadataType.HEADER);
-            }
-            catch (IOException e)
-            {
-                throw new CorruptSSTableException(e, descriptor.filenameFor(Component.STATS));
-            }
-
-            // Check if sstable is created using same partitioner.
-            // Partitioner can be null, which indicates older version of sstable or no stats available.
-            // In that case, we skip the check.
-            String partitionerName = metadata.get().partitioner.getClass().getCanonicalName();
-            if (statsComponent.validationMetadata() != null && !partitionerName.equals(statsComponent.validationMetadata().partitioner))
-            {
-                logger.error("Cannot open {}; partitioner {} does not match system partitioner {}.  Note that the default partitioner starting with Cassandra 1.2 is Murmur3Partitioner, so you will need to edit that to match your old partitioner if upgrading.",
-                             descriptor, statsComponent.validationMetadata().partitioner, partitionerName);
-                System.exit(1);
-            }
-
-            return (BigTableReader) new SSTableReaderBuilder.ForBatch(descriptor, metadata, components, statsComponent.statsMetadata(), statsComponent.serializationHeader(metadata.get())).build();
         }
     }
 

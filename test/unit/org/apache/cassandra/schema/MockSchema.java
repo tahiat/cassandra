@@ -45,6 +45,7 @@ import org.apache.cassandra.io.sstable.SSTableId;
 import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.big.BigTableReader;
+import org.apache.cassandra.io.sstable.format.big.BigTableReaderBuilder;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.sstable.metadata.MetadataType;
 import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
@@ -184,11 +185,20 @@ public class MockSchema
             StatsMetadata metadata = (StatsMetadata) collector.sstableLevel(level)
                                                               .finalizeMetadata(cfs.metadata().partitioner.getClass().getCanonicalName(), 0.01f, UNREPAIRED_SSTABLE, null, false, header)
                                                               .get(MetadataType.STATS);
-            SSTableReader reader = BigTableReader.internalOpen(descriptor, components, cfs.metadata,
-                                                               fileHandle.sharedCopy(), fileHandle.sharedCopy(), indexSummary.sharedCopy(),
-                                                               new AlwaysPresentFilter(), 1L, metadata, SSTableReader.OpenReason.NORMAL, header);
-            reader.first = readerBounds(firstToken);
-            reader.last = readerBounds(lastToken);
+            BigTableReader reader = new BigTableReaderBuilder(descriptor).setComponents(components)
+                                                                         .setTableMetadataRef(cfs.metadata)
+                                                                         .setDataFile(fileHandle.sharedCopy())
+                                                                         .setIndexFile(fileHandle.sharedCopy())
+                                                                         .setIndexSummary(indexSummary.sharedCopy())
+                                                                         .setFilter(new AlwaysPresentFilter())
+                                                                         .setMaxDataAge(1L)
+                                                                         .setStatsMetadata(metadata)
+                                                                         .setOpenReason(SSTableReader.OpenReason.NORMAL)
+                                                                         .setSerializationHeader(header)
+                                                                         .setFirst(readerBounds(firstToken))
+                                                                         .setLast(readerBounds(lastToken))
+                                                                         .setOnline(false)
+                                                                         .build();
             if (!keepRef)
                 reader.selfRef().release();
             return reader;

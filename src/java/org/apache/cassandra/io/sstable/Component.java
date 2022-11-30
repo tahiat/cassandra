@@ -32,7 +32,7 @@ public class Component
 {
     public static final char separator = '-';
 
-    final static EnumSet<Type> TYPES = EnumSet.allOf(Type.class);
+    public final static EnumSet<Type> TYPES = EnumSet.allOf(Type.class);
 
     /**
      * WARNING: Be careful while changing the names or string representation of the enum

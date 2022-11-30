@@ -42,7 +42,7 @@ public interface SSTableFormat<R extends SSTableReader, W extends SSTableWriter>
     Version getVersion(String version);
 
     SSTableWriter.Factory getWriterFactory();
-    SSTableReader.Factory<R> getReaderFactory();
+    SSTableReader.Factory<R, ?> getReaderFactory();
 
     Set<Component> streamingComponents();
 

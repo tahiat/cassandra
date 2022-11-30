@@ -25,18 +25,14 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
-
-import org.apache.cassandra.db.filter.ClusteringIndexFilter;
-import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
-import org.apache.cassandra.io.sstable.format.AbstractRowIndexEntry;
-import org.apache.cassandra.io.sstable.format.IScrubber;
-import org.apache.cassandra.io.sstable.format.SSTableFormat;
-import org.apache.cassandra.io.sstable.format.SSTableReaderBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.config.Config.DiskAccessMode;
 import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.filter.ClusteringIndexFilter;
 import org.apache.cassandra.db.filter.ColumnFilter;
+import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.db.rows.Rows;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.db.rows.UnfilteredRowIterators;
@@ -44,11 +40,13 @@ import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.*;
+import org.apache.cassandra.io.sstable.format.AbstractRowIndexEntry;
+import org.apache.cassandra.io.sstable.format.IScrubber;
+import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableReadsListener;
 import org.apache.cassandra.io.sstable.format.SSTableReadsListener.SelectionReason;
 import org.apache.cassandra.io.sstable.format.SSTableReadsListener.SkippingReason;
-import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.io.util.FileDataInput;
@@ -56,7 +54,6 @@ import org.apache.cassandra.io.util.FileHandle;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.io.util.RandomAccessReader;
 import org.apache.cassandra.schema.Schema;
-import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.IFilter;
@@ -73,13 +70,15 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
     private final RowIndexEntry.IndexSerializer rowIndexEntrySerializer;
     private final IndexSummary indexSummary;
     private final FileHandle ifile;
+    private final DiskAccessMode indexFileAccessMode;
 
-    BigTableReader(SSTableReaderBuilder builder)
+    public BigTableReader(BigTableReaderBuilder builder)
     {
         super(builder);
-        this.ifile = builder.ifile;
-        this.indexSummary = builder.summary;
+        this.ifile = builder.getIndexFile();
+        this.indexSummary = builder.getIndexSummary();
         this.rowIndexEntrySerializer = new RowIndexEntry.Serializer(descriptor.version, header);
+        this.indexFileAccessMode = builder.getIndexFileAccessMode();
     }
 
     @Override
@@ -535,6 +534,28 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
         return indexSummary.getScanPositionFromBinarySearch(key);
     }
 
+    private BigTableReaderBuilder readerBuilderStub(IndexSummary indexSummary, IFilter filter)
+    {
+        return new BigTableReaderBuilder(descriptor).setComponents(components)
+                                                    .setTableMetadataRef(metadata)
+                                                    .setIndexFile(ifile != null ? ifile.sharedCopy() : null)
+                                                    .setDataFile(dfile.sharedCopy())
+                                                    .setIndexSummary(indexSummary)
+                                                    .setFilter(filter)
+                                                    .setMaxDataAge(maxDataAge)
+                                                    .setStatsMetadata(sstableMetadata)
+                                                    .setOpenReason(openReason)
+                                                    .setSerializationHeader(header)
+                                                    .setFirst(first)
+                                                    .setLast(last)
+                                                    .setSuspected(isSuspect.get())
+                                                    .setOnline(true)
+                                                    .setDiskOptimizationStrategy(diskOptimizationStrategy)
+                                                    .setDiskOptimizationEstimatePercentile(diskOptimizationEstimatePercentile)
+                                                    .setDataFileAccessMode(dataFileAccessMode)
+                                                    .setIndexFileAccessMode(indexFileAccessMode);
+    }
+
     /**
      * Clone this reader with the provided start and open reason, and set the clone as replacement.
      *
@@ -559,22 +580,11 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
      */
     private BigTableReader cloneAndReplace(DecoratedKey newFirst, OpenReason reason, IndexSummary newSummary)
     {
-        BigTableReader replacement = internalOpen(descriptor,
-                                                  components,
-                                                  metadata,
-                                                  ifile != null ? ifile.sharedCopy() : null,
-                                                  dfile.sharedCopy(),
-                                                  newSummary,
-                                                  bf.sharedCopy(),
-                                                  maxDataAge,
-                                                  sstableMetadata,
-                                                  reason,
-                                                  header);
+        BigTableReaderBuilder builder = readerBuilderStub(newSummary, bf != null ? bf.sharedCopy() : null).setIndexSummary(newSummary)
+                                                                                                          .setOpenReason(reason)
+                                                                                                          .setFirst(newFirst);
 
-        replacement.first = newFirst;
-        replacement.last = last;
-        replacement.isSuspect.set(isSuspect.get());
-        return replacement;
+        return builder.build();
     }
 
     /**
@@ -586,22 +596,9 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
     @VisibleForTesting
     public SSTableReader cloneAndReplace(IFilter newBloomFilter)
     {
-        SSTableReader replacement = internalOpen(descriptor,
-                                                 components,
-                                                 metadata,
-                                                 ifile.sharedCopy(),
-                                                 dfile.sharedCopy(),
-                                                 indexSummary,
-                                                 newBloomFilter,
-                                                 maxDataAge,
-                                                 sstableMetadata,
-                                                 openReason,
-                                                 header);
+        BigTableReaderBuilder builder = readerBuilderStub(indexSummary != null ? indexSummary.sharedCopy() : null, newBloomFilter).setFilter(newBloomFilter);
 
-        replacement.first = first;
-        replacement.last = last;
-        replacement.isSuspect.set(isSuspect.get());
-        return replacement;
+        return builder.build();
     }
 
     public SSTableReader cloneWithRestoredStart(DecoratedKey restoredStart)
@@ -700,24 +697,4 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
         }
     }
 
-    /**
-     * Open a RowIndexedReader which already has its state initialized (by SSTableWriter).
-     */
-    public static BigTableReader internalOpen(Descriptor desc,
-                                              Set<Component> components,
-                                              TableMetadataRef metadata,
-                                              FileHandle ifile,
-                                              FileHandle dfile,
-                                              IndexSummary summary,
-                                              IFilter bf,
-                                              long maxDataAge,
-                                              StatsMetadata sstableMetadata,
-                                              OpenReason openReason,
-                                              SerializationHeader header)
-    {
-        assert desc != null && ifile != null && dfile != null && summary != null && bf != null && sstableMetadata != null;
-
-        return (BigTableReader) new SSTableReaderBuilder.ForWriter(desc, metadata, maxDataAge, components, sstableMetadata, openReason, header)
-                                .bf(bf).ifile(ifile).dfile(dfile).summary(summary).build();
-    }
 }
