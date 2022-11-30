@@ -52,6 +52,7 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.index.Index;
 import org.apache.cassandra.io.FSReadError;
+import org.apache.cassandra.io.sstable.format.CompressionInfoComponent;
 import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.big.BigTableReader;
@@ -886,7 +887,7 @@ public class SSTableReaderTest
 
         expectedException.expect(CorruptSSTableException.class);
         expectedException.expectMessage("CompressionInfo.db");
-        desc.verifyCompressionInfoExistenceIfApplicable(components);
+        CompressionInfoComponent.verifyCompressionInfoExistenceIfApplicable(desc, components);
     }
 
     @Test
@@ -894,7 +895,7 @@ public class SSTableReaderTest
     {
         Descriptor desc = setUpForTestVerfiyCompressionInfoExistence();
         Set<Component> components = desc.discoverComponents();
-        desc.verifyCompressionInfoExistenceIfApplicable(components);
+        CompressionInfoComponent.verifyCompressionInfoExistenceIfApplicable(desc, components);
 
         // mark the toc file not readable in order to trigger the FSReadError
         File tocFile = new File(desc.filenameFor(Component.TOC));
@@ -902,7 +903,7 @@ public class SSTableReaderTest
 
         expectedException.expect(FSReadError.class);
         expectedException.expectMessage("TOC.txt");
-        desc.verifyCompressionInfoExistenceIfApplicable(components);
+        CompressionInfoComponent.verifyCompressionInfoExistenceIfApplicable(desc, components);
     }
 
     @Test
@@ -910,7 +911,7 @@ public class SSTableReaderTest
     {
         Descriptor desc = setUpForTestVerfiyCompressionInfoExistence();
         Set<Component> components = desc.discoverComponents();
-        desc.verifyCompressionInfoExistenceIfApplicable(components);
+        CompressionInfoComponent.verifyCompressionInfoExistenceIfApplicable(desc, components);
     }
 
     private Descriptor setUpForTestVerfiyCompressionInfoExistence()

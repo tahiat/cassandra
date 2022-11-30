@@ -35,6 +35,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.apache.cassandra.io.sstable.format.CompressionInfoComponent;
 import org.apache.cassandra.io.sstable.format.IScrubber;
 import org.apache.cassandra.io.util.File;
 import org.apache.commons.lang3.StringUtils;
@@ -444,7 +445,7 @@ public class ScrubTest
 
         if (compression)
         { // overwrite with garbage the compression chunks from key1 to key2
-            CompressionMetadata compData = CompressionMetadata.create(sstable.getFilename());
+            CompressionMetadata compData = CompressionInfoComponent.load(sstable.descriptor);
 
             CompressionMetadata.Chunk chunk1 = compData.chunkFor(
                     sstable.getPosition(PartitionPosition.ForKey.get(key1, sstable.getPartitioner()), SSTableReader.Operator.EQ));
