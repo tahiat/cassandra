@@ -38,19 +38,16 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
-import org.apache.cassandra.io.sstable.IndexSummary;
 import org.apache.cassandra.io.sstable.KeyIterator;
 import org.apache.cassandra.io.sstable.SSTableIdentityIterator;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
-import org.apache.cassandra.io.sstable.metadata.MetadataComponent;
+import org.apache.cassandra.io.sstable.format.StatsComponent;
 import org.apache.cassandra.io.sstable.metadata.MetadataType;
-import org.apache.cassandra.io.sstable.metadata.ValidationMetadata;
 import org.apache.cassandra.io.util.DataIntegrityMetadata;
 import org.apache.cassandra.io.util.DataIntegrityMetadata.FileDigestValidator;
 import org.apache.cassandra.io.util.FileInputStreamPlus;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.io.util.RandomAccessReader;
-import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.BloomFilterSerializer;
@@ -141,10 +138,9 @@ public class Verifier implements IVerifier
         outputHandler.output(String.format("Deserializing sstable metadata for %s ", sstable));
         try
         {
-            EnumSet<MetadataType> types = EnumSet.of(MetadataType.VALIDATION, MetadataType.STATS, MetadataType.HEADER);
-            Map<MetadataType, MetadataComponent> sstableMetadata = sstable.descriptor.getMetadataSerializer().deserialize(sstable.descriptor, types);
-            if (sstableMetadata.containsKey(MetadataType.VALIDATION) &&
-                !((ValidationMetadata)sstableMetadata.get(MetadataType.VALIDATION)).partitioner.equals(sstable.getPartitioner().getClass().getCanonicalName()))
+            StatsComponent statsComponent = StatsComponent.load(sstable.descriptor, MetadataType.VALIDATION, MetadataType.STATS, MetadataType.HEADER);
+            if (statsComponent.validationMetadata() != null &&
+                !statsComponent.validationMetadata().partitioner.equals(sstable.getPartitioner().getClass().getCanonicalName()))
                 throw new IOException("Partitioner does not match validation metadata");
         }
         catch (Throwable t)
