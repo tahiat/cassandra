@@ -43,6 +43,7 @@ import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.GaugeProvider;
 import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.format.AbstractRowIndexEntry;
+import org.apache.cassandra.io.sstable.format.CompressionInfoComponent;
 import org.apache.cassandra.io.sstable.format.IScrubber;
 import org.apache.cassandra.io.sstable.format.SSTableFlushObserver;
 import org.apache.cassandra.io.sstable.format.SSTableFormat;
@@ -298,7 +299,7 @@ public class BigFormat implements SSTableFormat<BigTableReader, BigTableWriter>
             // For the 3.0+ sstable format, the (misnomed) stats component hold the serialization header which we need to deserialize the sstable content
             assert components.contains(Component.STATS) : "Stats component is missing for sstable " + descriptor;
 
-            descriptor.verifyCompressionInfoExistenceIfApplicable(components);
+            CompressionInfoComponent.verifyCompressionInfoExistenceIfApplicable(descriptor, components);
 
             EnumSet<MetadataType> types = EnumSet.of(MetadataType.VALIDATION, MetadataType.STATS, MetadataType.HEADER);
 
@@ -366,7 +367,7 @@ public class BigFormat implements SSTableFormat<BigTableReader, BigTableWriter>
             // Minimum components without which we can't do anything
             assert components.contains(Component.DATA) : "Data component is missing for sstable " + descriptor;
             assert components.contains(Component.PRIMARY_INDEX) : "Primary index component is missing for sstable " + descriptor;
-            descriptor.verifyCompressionInfoExistenceIfApplicable(components);
+            CompressionInfoComponent.verifyCompressionInfoExistenceIfApplicable(descriptor, components);
 
             EnumSet<MetadataType> types = EnumSet.of(MetadataType.VALIDATION, MetadataType.STATS, MetadataType.HEADER);
             Map<MetadataType, MetadataComponent> sstableMetadata;
