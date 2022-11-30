@@ -17,7 +17,10 @@
  */
 package org.apache.cassandra.io.sstable;
 
+import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -83,6 +86,9 @@ public class Component
         }
     }
 
+    private final static Set<Component> singletonsInternal = new HashSet<>();
+    public final static Set<Component> singletons = Collections.unmodifiableSet(singletonsInternal);
+
     // singleton components for types that don't need ids
     public final static Component DATA = new Component(Type.DATA);
     public final static Component PRIMARY_INDEX = new Component(Type.PRIMARY_INDEX);
@@ -98,10 +104,11 @@ public class Component
     public final String name;
     public final int hashCode;
 
-    public Component(Type type)
+    private Component(Type type)
     {
         this(type, type.repr);
         assert type != Type.CUSTOM;
+        singletonsInternal.add(this);
     }
 
     public Component(Type type, String name)
