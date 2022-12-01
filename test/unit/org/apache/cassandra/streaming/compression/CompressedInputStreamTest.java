@@ -127,7 +127,7 @@ public class CompressedInputStreamTest
         CompressionParams param = CompressionParams.snappy(32, minCompressRatio);
         Map<Long, Long> index = new HashMap<Long, Long>();
         try (CompressedSequentialWriter writer = new CompressedSequentialWriter(tmp,
-                                                                                desc.filenameFor(Component.COMPRESSION_INFO),
+                                                                                desc.fileFor(Component.COMPRESSION_INFO),
                                                                                 null,
                                                                                 SequentialWriterOption.DEFAULT,
                                                                                 param, collector))
@@ -219,4 +219,3 @@ public class CompressedInputStreamTest
         }
     }
 }
-

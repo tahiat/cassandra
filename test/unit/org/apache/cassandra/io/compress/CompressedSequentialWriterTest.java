@@ -117,7 +117,7 @@ public class CompressedSequentialWriterTest extends SequentialWriterTest
 
         byte[] dataPre = new byte[bytesToTest];
         byte[] rawPost = new byte[bytesToTest];
-        try (CompressedSequentialWriter writer = new CompressedSequentialWriter(f, filename + ".metadata",
+        try (CompressedSequentialWriter writer = new CompressedSequentialWriter(f, new File(filename + ".metadata"),
                 null, SequentialWriterOption.DEFAULT,
                 compressionParameters,
                 sstableMetadataCollector))
@@ -150,8 +150,8 @@ public class CompressedSequentialWriterTest extends SequentialWriterTest
         }
 
         assert f.exists();
-        try (FileHandle.Builder builder = new FileHandle.Builder(filename).withCompressionMetadata(new CompressionMetadata(new File(filename + ".metadata"), f.length(), true));
-             FileHandle fh = builder.complete();
+        try (CompressionMetadata compressionMetadata = CompressionMetadata.open(new File(filename + ".metadata"), f.length(), true);
+             FileHandle fh = new FileHandle.Builder(f).withCompressionMetadata(compressionMetadata).complete();
              RandomAccessReader reader = fh.createReader())
         {
             assertEquals(dataPre.length + rawPost.length, reader.length());
@@ -217,7 +217,7 @@ public class CompressedSequentialWriterTest extends SequentialWriterTest
         compressionParameters = new CompressionParams(MockCompressor.class.getTypeName(),
                                                       MockCompressor.paramsFor(ratio, extra),
                                                       DEFAULT_CHUNK_LENGTH, ratio);
-        try (CompressedSequentialWriter writer = new CompressedSequentialWriter(f, f.path() + ".metadata",
+        try (CompressedSequentialWriter writer = new CompressedSequentialWriter(f, new File(f.path() + ".metadata"),
                                                                                 null, SequentialWriterOption.DEFAULT,
                                                                                 compressionParameters,
                                                                                 sstableMetadataCollector))
@@ -228,8 +228,8 @@ public class CompressedSequentialWriterTest extends SequentialWriterTest
         }
 
         assert f.exists();
-        try (FileHandle.Builder builder = new FileHandle.Builder(filename).withCompressionMetadata(new CompressionMetadata(new File(filename + ".metadata"), f.length(), true));
-             FileHandle fh = builder.complete();
+        try (CompressionMetadata compressionMetadata = CompressionMetadata.open(new File(filename + ".metadata"), f.length(), true);
+             FileHandle fh = new FileHandle.Builder(f).withCompressionMetadata(compressionMetadata).complete();
              RandomAccessReader reader = fh.createReader())
         {
             assertEquals(size, reader.length());
@@ -276,7 +276,7 @@ public class CompressedSequentialWriterTest extends SequentialWriterTest
         final int bufferSize = 48;
         final int writeSize = 64;
         byte[] toWrite = new byte[writeSize];
-        try (SequentialWriter writer = new CompressedSequentialWriter(tempFile, offsetsFile.path(),
+        try (SequentialWriter writer = new CompressedSequentialWriter(tempFile, offsetsFile,
                                                                       null, SequentialWriterOption.DEFAULT,
                                                                       CompressionParams.lz4(bufferSize),
                                                                       new MetadataCollector(new ClusteringComparator(UTF8Type.instance))))
@@ -330,7 +330,7 @@ public class CompressedSequentialWriterTest extends SequentialWriterTest
 
         private TestableCSW(File file, File offsetsFile) throws IOException
         {
-            this(file, offsetsFile, new CompressedSequentialWriter(file, offsetsFile.path(),
+            this(file, offsetsFile, new CompressedSequentialWriter(file, offsetsFile,
                                                                    null, SequentialWriterOption.DEFAULT,
                                                                    CompressionParams.lz4(BUFFER_SIZE, MAX_COMPRESSED),
                                                                    new MetadataCollector(new ClusteringComparator(UTF8Type.instance))));

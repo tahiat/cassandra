@@ -46,11 +46,13 @@ import org.apache.cassandra.io.sstable.metadata.MetadataComponent;
 import org.apache.cassandra.io.sstable.metadata.MetadataType;
 import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.io.util.FileUtils;
+import org.apache.cassandra.io.util.MmappedRegionsCache;
 import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.schema.SchemaConstants;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.schema.TableMetadataRef;
+import org.apache.cassandra.utils.Throwables;
 import org.apache.cassandra.utils.TimeUUID;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.concurrent.Transactional;
@@ -70,6 +72,7 @@ public abstract class SSTableWriter extends SSTable implements Transactional
     protected final long keyCount;
     protected final MetadataCollector metadataCollector;
     protected final SerializationHeader header;
+    protected final MmappedRegionsCache mmappedRegionsCache = new MmappedRegionsCache();
     protected final TransactionalProxy txnProxy = txnProxy();
     protected final Collection<SSTableFlushObserver> observers;
 
@@ -81,6 +84,14 @@ public abstract class SSTableWriter extends SSTable implements Transactional
         // should be set during doPrepare()
         protected SSTableReader finalReader;
         protected boolean openResult;
+
+        @Override
+        protected Throwable doPostCleanup(Throwable accumulate)
+        {
+            accumulate = super.doPostCleanup(accumulate);
+            accumulate = Throwables.close(accumulate, Collections.singleton(mmappedRegionsCache));
+            return accumulate;
+        }
     }
 
     protected SSTableWriter(Descriptor descriptor,

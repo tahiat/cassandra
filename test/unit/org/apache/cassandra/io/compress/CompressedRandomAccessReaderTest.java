@@ -98,7 +98,7 @@ public class CompressedRandomAccessReaderTest
         File f = FileUtils.createTempFile("compressed6791_", "3");
         String filename = f.absolutePath();
         MetadataCollector sstableMetadataCollector = new MetadataCollector(new ClusteringComparator(BytesType.instance));
-        try(CompressedSequentialWriter writer = new CompressedSequentialWriter(f, filename + ".metadata",
+        try(CompressedSequentialWriter writer = new CompressedSequentialWriter(f, new File(filename + ".metadata"),
                                                                                null, SequentialWriterOption.DEFAULT,
                                                                                CompressionParams.snappy(32),
                                                                                sstableMetadataCollector))
@@ -119,9 +119,8 @@ public class CompressedRandomAccessReaderTest
             writer.finish();
         }
 
-        try (FileHandle.Builder builder = new FileHandle.Builder(filename)
-                                                              .withCompressionMetadata(new CompressionMetadata(new File(filename + ".metadata"), f.length(), true));
-             FileHandle fh = builder.complete();
+        try (CompressionMetadata compressionMetadata = CompressionMetadata.open(new File(filename + ".metadata"), f.length(), true);
+             FileHandle fh = new FileHandle.Builder(f).withCompressionMetadata(compressionMetadata).complete();
              RandomAccessReader reader = fh.createReader())
         {
             String res = reader.readLine();
@@ -151,7 +150,7 @@ public class CompressedRandomAccessReaderTest
         try
         {
             writeSSTable(file, CompressionParams.snappy(chunkLength), 10);
-            CompressionMetadata metadata = new CompressionMetadata(new File(filename + ".metadata"), file.length(), true);
+            CompressionMetadata metadata = CompressionMetadata.open(new File(filename + ".metadata"), file.length(), true);
 
             long chunks = 2761628520L;
             long midPosition = (chunks / 2L) * chunkLength;
@@ -177,9 +176,8 @@ public class CompressedRandomAccessReaderTest
         final String filename = f.absolutePath();
         writeSSTable(f, compressed ? CompressionParams.snappy() : null, junkSize);
 
-        CompressionMetadata compressionMetadata = compressed ? new CompressionMetadata(new File(filename + ".metadata"), f.length(), true) : null;
-        try (FileHandle.Builder builder = new FileHandle.Builder(filename).mmapped(usemmap).withCompressionMetadata(compressionMetadata);
-             FileHandle fh = builder.complete();
+        try (CompressionMetadata compressionMetadata = compressed ? CompressionMetadata.open(new File(filename + ".metadata"), f.length(), true) : null;
+             FileHandle fh = new FileHandle.Builder(f).mmapped(usemmap).withCompressionMetadata(compressionMetadata).complete();
              RandomAccessReader reader = fh.createReader())
         {
             String expected = "The quick brown fox jumps over the lazy dog";
@@ -203,7 +201,7 @@ public class CompressedRandomAccessReaderTest
         final String filename = f.absolutePath();
         MetadataCollector sstableMetadataCollector = new MetadataCollector(new ClusteringComparator(BytesType.instance));
         try(SequentialWriter writer = params != null
-                ? new CompressedSequentialWriter(f, filename + ".metadata",
+                ? new CompressedSequentialWriter(f, new File(filename + ".metadata"),
                                                  null, SequentialWriterOption.DEFAULT,
                                                  params, sstableMetadataCollector)
                 : new SequentialWriter(f))
@@ -243,7 +241,7 @@ public class CompressedRandomAccessReaderTest
         assertTrue(metadata.createFileIfNotExists());
 
         MetadataCollector sstableMetadataCollector = new MetadataCollector(new ClusteringComparator(BytesType.instance));
-        try (SequentialWriter writer = new CompressedSequentialWriter(file, metadata.path(),
+        try (SequentialWriter writer = new CompressedSequentialWriter(file, metadata,
                                                                       null, SequentialWriterOption.DEFAULT,
                                                                       CompressionParams.snappy(), sstableMetadataCollector))
         {
@@ -252,16 +250,14 @@ public class CompressedRandomAccessReaderTest
         }
 
         // open compression metadata and get chunk information
-        CompressionMetadata meta = new CompressionMetadata(metadata, file.length(), true);
-        CompressionMetadata.Chunk chunk = meta.chunkFor(0);
-
-        try (FileHandle.Builder builder = new FileHandle.Builder(file.path()).withCompressionMetadata(meta);
-             FileHandle fh = builder.complete();
+        try (CompressionMetadata meta = CompressionMetadata.open(metadata, file.length(), true);
+             FileHandle fh = new FileHandle.Builder(file).withCompressionMetadata(meta).complete();
              RandomAccessReader reader = fh.createReader())
         {// read and verify compressed data
             assertEquals(CONTENT, reader.readLine());
             Random random = new Random();
-            try(RandomAccessFile checksumModifier = new RandomAccessFile(file.toJavaIOFile(), "rw"))
+            CompressionMetadata.Chunk chunk = meta.chunkFor(0);
+            try (RandomAccessFile checksumModifier = new RandomAccessFile(file.toJavaIOFile(), "rw"))
             {
                 byte[] checksum = new byte[4];
 
