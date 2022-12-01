@@ -30,9 +30,10 @@ import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.SSTableBuilder;
 import org.apache.cassandra.io.sstable.SSTableMultiWriter;
 import org.apache.cassandra.io.sstable.format.SSTableFormat;
-import org.apache.cassandra.io.sstable.format.big.BigTableZeroCopyWriter;
+import org.apache.cassandra.io.sstable.SSTableZeroCopyWriter;
 import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.File;
@@ -103,7 +104,7 @@ public class CassandraEntireSSTableStreamReader implements IStreamReader
                      prettyPrintMemory(totalSize),
                      cfs.metadata());
 
-        BigTableZeroCopyWriter writer = null;
+        SSTableZeroCopyWriter writer = null;
 
         try
         {
@@ -165,7 +166,7 @@ public class CassandraEntireSSTableStreamReader implements IStreamReader
     }
 
     @SuppressWarnings("resource")
-    protected BigTableZeroCopyWriter createWriter(ColumnFamilyStore cfs, long totalSize, Collection<Component> components) throws IOException
+    protected SSTableZeroCopyWriter createWriter(ColumnFamilyStore cfs, long totalSize, Collection<Component> components) throws IOException
     {
         File dataDir = getDataDir(cfs, totalSize);
 
@@ -178,6 +179,8 @@ public class CassandraEntireSSTableStreamReader implements IStreamReader
 
         logger.debug("[Table #{}] {} Components to write: {}", cfs.metadata(), desc.filenameFor(Component.DATA), components);
 
-        return new BigTableZeroCopyWriter(desc, cfs.metadata, lifecycleNewTracker, components);
+        SSTableBuilder<?, ?> builder = new SSTableBuilder<>(desc).setComponents(components)
+                                                                 .setTableMetadataRef(cfs.metadata);
+        return new SSTableZeroCopyWriter(builder, lifecycleNewTracker);
     }
 }

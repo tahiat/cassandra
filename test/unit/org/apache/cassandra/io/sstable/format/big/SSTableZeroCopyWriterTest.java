@@ -29,6 +29,9 @@ import java.util.Set;
 import java.util.function.Function;
 
 import com.google.common.collect.ImmutableSet;
+
+import org.apache.cassandra.io.sstable.SSTableBuilder;
+import org.apache.cassandra.io.sstable.SSTableZeroCopyWriter;
 import org.apache.cassandra.io.util.File;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -64,7 +67,7 @@ import static org.apache.cassandra.io.util.DataInputPlus.DataInputStreamPlus;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 
-public class BigTableZeroCopyWriterTest
+public class SSTableZeroCopyWriterTest
 {
     public static final String KEYSPACE1 = "BigTableBlockWriterTest";
     public static final String CF_STANDARD = "Standard1";
@@ -155,7 +158,9 @@ public class BigTableZeroCopyWriterTest
         Set<Component> componentsToWrite = ImmutableSet.of(Component.DATA, Component.PRIMARY_INDEX,
                                                            Component.STATS);
 
-        BigTableZeroCopyWriter btzcw = new BigTableZeroCopyWriter(desc, metadata, txn, componentsToWrite);
+        SSTableBuilder<?, ?> builder = new SSTableBuilder<>(desc).setTableMetadataRef(metadata)
+                                                                 .setComponents(componentsToWrite);
+        SSTableZeroCopyWriter btzcw = new SSTableZeroCopyWriter(builder, txn);
 
         for (Component component : componentsToWrite)
         {

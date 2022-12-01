@@ -18,6 +18,7 @@
 
 package org.apache.cassandra.io.sstable;
 
+import java.util.Collection;
 import java.util.Objects;
 import java.util.Set;
 
@@ -32,7 +33,7 @@ import org.apache.cassandra.schema.TableMetadataRef;
 
 import static org.apache.cassandra.db.Directories.SECONDARY_INDEX_NAME_SEPARATOR;
 
-public abstract class SSTableBuilder<S extends SSTable, B extends SSTableBuilder<S, B>>
+public class SSTableBuilder<S extends SSTable, B extends SSTableBuilder<S, B>>
 {
     public SSTableBuilder(Descriptor descriptor)
     {
@@ -46,7 +47,7 @@ public abstract class SSTableBuilder<S extends SSTable, B extends SSTableBuilder
     private double diskOptimizationEstimatePercentile = DatabaseDescriptor.getDiskOptimizationEstimatePercentile();
     private Config.DiskAccessMode dataFileAccessMode = DatabaseDescriptor.getDiskAccessMode();
 
-    public B setComponents(Set<Component> components)
+    public B setComponents(Collection<Component> components)
     {
         Preconditions.checkArgument(components.stream().allMatch(Objects::nonNull));
         this.components = ImmutableSet.copyOf(components);

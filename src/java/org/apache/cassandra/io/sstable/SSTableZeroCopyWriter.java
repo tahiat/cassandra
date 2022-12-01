@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.cassandra.io.sstable.format.big;
+package org.apache.cassandra.io.sstable;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -28,34 +28,26 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
-import org.apache.cassandra.io.util.File;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.compress.BufferType;
-import org.apache.cassandra.io.sstable.Component;
-import org.apache.cassandra.io.sstable.Descriptor;
-import org.apache.cassandra.io.sstable.SSTable;
-import org.apache.cassandra.io.sstable.SSTableMultiWriter;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.SequentialWriter;
 import org.apache.cassandra.io.util.SequentialWriterOption;
 import org.apache.cassandra.net.AsyncStreamingInputPlus;
 import org.apache.cassandra.schema.TableId;
-import org.apache.cassandra.schema.TableMetadataRef;
 
 import static java.lang.String.format;
 import static org.apache.cassandra.utils.FBUtilities.prettyPrintMemory;
 
-public class BigTableZeroCopyWriter extends SSTable implements SSTableMultiWriter
+public class SSTableZeroCopyWriter extends SSTable implements SSTableMultiWriter
 {
-    private static final Logger logger = LoggerFactory.getLogger(BigTableZeroCopyWriter.class);
+    private static final Logger logger = LoggerFactory.getLogger(SSTableZeroCopyWriter.class);
 
-    private final TableMetadataRef metadata;
     private volatile SSTableReader finalReader;
     private final Map<Component.Type, SequentialWriter> componentWriters;
 
@@ -66,30 +58,17 @@ public class BigTableZeroCopyWriter extends SSTable implements SSTableMultiWrite
                               .bufferType(BufferType.OFF_HEAP)
                               .build();
 
-    private static final ImmutableSet<Component> SUPPORTED_COMPONENTS =
-        ImmutableSet.of(Component.DATA,
-                        Component.PRIMARY_INDEX,
-                        Component.SUMMARY,
-                        Component.STATS,
-                        Component.COMPRESSION_INFO,
-                        Component.FILTER,
-                        Component.DIGEST,
-                        Component.CRC);
-
-    public BigTableZeroCopyWriter(Descriptor descriptor,
-                                  TableMetadataRef metadata,
-                                  LifecycleNewTracker lifecycleNewTracker,
-                                  final Collection<Component> components)
+    public SSTableZeroCopyWriter(SSTableBuilder<?, ?> builder,
+                                 LifecycleNewTracker lifecycleNewTracker)
     {
-        super(descriptor, ImmutableSet.copyOf(components), metadata, DatabaseDescriptor.getDiskOptimizationStrategy());
+        super(builder);
 
         lifecycleNewTracker.trackNew(this);
-        this.metadata = metadata;
         this.componentWriters = new EnumMap<>(Component.Type.class);
 
-        if (!SUPPORTED_COMPONENTS.containsAll(components))
+        if (!descriptor.getFormat().streamingComponents().containsAll(components))
             throw new AssertionError(format("Unsupported streaming component detected %s",
-                                            Sets.difference(ImmutableSet.copyOf(components), SUPPORTED_COMPONENTS)));
+                                            Sets.difference(ImmutableSet.copyOf(components), descriptor.getFormat().streamingComponents())));
 
         for (Component c : components)
             componentWriters.put(c.type, makeWriter(descriptor, c));
@@ -97,7 +76,7 @@ public class BigTableZeroCopyWriter extends SSTable implements SSTableMultiWrite
 
     private static SequentialWriter makeWriter(Descriptor descriptor, Component component)
     {
-        return new SequentialWriter(new File(descriptor.filenameFor(component)), WRITER_OPTION, false);
+        return new SequentialWriter(descriptor.fileFor(component), WRITER_OPTION, false);
     }
 
     private void write(DataInputPlus in, long size, SequentialWriter out) throws FSWriteError
@@ -119,7 +98,7 @@ public class BigTableZeroCopyWriter extends SSTable implements SSTableMultiWrite
         }
         catch (IOException e)
         {
-            throw new FSWriteError(e, out.getPath());
+            throw new FSWriteError(e, out.getFile());
         }
     }
 
