@@ -356,28 +356,27 @@ public class BigTableWriter extends SSTableWriter
             indexSummary = iwriter.summary.build(metadata().partitioner, boundary);
             long indexFileLength = new File(descriptor.filenameFor(Component.PRIMARY_INDEX)).length();
             int indexBufferSize = optimizationStrategy.bufferSize(indexFileLength / indexSummary.size());
-            ifile = iwriter.builder.bufferSize(indexBufferSize).complete(boundary.indexLength);
-            try (FileHandle.Builder dbuilder = new FileHandle.Builder(descriptor.filenameFor(Component.DATA)))
+            ifile = iwriter.builder.bufferSize(indexBufferSize).withLengthOverride(boundary.indexLength).complete();
+            FileHandle.Builder dbuilder = new FileHandle.Builder(descriptor.fileFor(Component.DATA));
+            dbuilder.mmapped(DatabaseDescriptor.getDiskAccessMode() == Config.DiskAccessMode.mmap);
+            chunkCache.ifPresent(dbuilder::withChunkCache);
+            if (compression)
+                dbuilder.withCompressionMetadata(((CompressedSequentialWriter) dataFile).open(boundary.dataLength));
+
+            EstimatedHistogram partitionSizeHistogram = stats.estimatedPartitionSize;
+
+            if (partitionSizeHistogram.isOverflowed())
             {
-                dbuilder.mmapped(DatabaseDescriptor.getDiskAccessMode() == Config.DiskAccessMode.mmap);
-                chunkCache.ifPresent(dbuilder::withChunkCache);
-                if (compression)
-                    dbuilder.withCompressionMetadata(((CompressedSequentialWriter) dataFile).open(boundary.dataLength));
+                logger.warn("Estimated partition size histogram for '{}' is overflowed ({} values greater than {}). " +
+                            "Clearing the overflow bucket to allow for degraded mean and percentile calculations...",
+                            descriptor, partitionSizeHistogram.overflowCount(), partitionSizeHistogram.getLargestBucketOffset());
 
-                EstimatedHistogram partitionSizeHistogram = stats.estimatedPartitionSize;
-
-                if (partitionSizeHistogram.isOverflowed())
-                {
-                    logger.warn("Estimated partition size histogram for '{}' is overflowed ({} values greater than {}). " +
-                                "Clearing the overflow bucket to allow for degraded mean and percentile calculations...",
-                                descriptor, partitionSizeHistogram.overflowCount(), partitionSizeHistogram.getLargestBucketOffset());
-
-                    partitionSizeHistogram.clearOverflow();
-                }
-
-                int dataBufferSize = optimizationStrategy.bufferSize(partitionSizeHistogram.percentile(DatabaseDescriptor.getDiskOptimizationEstimatePercentile()));
-                dfile = dbuilder.bufferSize(dataBufferSize).complete(boundary.dataLength);
+                partitionSizeHistogram.clearOverflow();
             }
+
+            int dataBufferSize = optimizationStrategy.bufferSize(partitionSizeHistogram.percentile(DatabaseDescriptor.getDiskOptimizationEstimatePercentile()));
+            dfile = dbuilder.bufferSize(dataBufferSize).withLengthOverride(boundary.dataLength).complete();
+
             invalidateCacheAtBoundary(dfile);
             sstable = BigTableReader.internalOpen(descriptor,
                                                   components, metadata,
@@ -445,14 +444,12 @@ public class BigTableWriter extends SSTableWriter
             int indexBufferSize = optimizationStrategy.bufferSize(indexFileLength / indexSummary.size());
             ifile = iwriter.builder.bufferSize(indexBufferSize).complete();
 
-            try (FileHandle.Builder dbuilder = new FileHandle.Builder(descriptor.filenameFor(Component.DATA)))
-            {
-                dbuilder.mmapped(DatabaseDescriptor.getDiskAccessMode() == Config.DiskAccessMode.mmap);
-                chunkCache.ifPresent(dbuilder::withChunkCache);
-                if (compression)
-                    dbuilder.withCompressionMetadata(((CompressedSequentialWriter) dataFile).open(0));
-                dfile = dbuilder.bufferSize(dataBufferSize).complete();
-            }
+            FileHandle.Builder dbuilder = new FileHandle.Builder(descriptor.fileFor(Component.DATA));
+            dbuilder.mmapped(DatabaseDescriptor.getDiskAccessMode() == Config.DiskAccessMode.mmap);
+            chunkCache.ifPresent(dbuilder::withChunkCache);
+            if (compression)
+                dbuilder.withCompressionMetadata(((CompressedSequentialWriter) dataFile).open(0));
+            dfile = dbuilder.bufferSize(dataBufferSize).complete();
             invalidateCacheAtBoundary(dfile);
             sstable = BigTableReader.internalOpen(descriptor,
                                                   components,
@@ -563,7 +560,7 @@ public class BigTableWriter extends SSTableWriter
         IndexWriter(long keyCount)
         {
             indexFile = new SequentialWriter(new File(descriptor.filenameFor(Component.PRIMARY_INDEX)), writerOption);
-            builder = new FileHandle.Builder(descriptor.filenameFor(Component.PRIMARY_INDEX)).mmapped(DatabaseDescriptor.getIndexAccessMode() == Config.DiskAccessMode.mmap);
+            builder = new FileHandle.Builder(descriptor.fileFor(Component.PRIMARY_INDEX)).mmapped(DatabaseDescriptor.getIndexAccessMode() == Config.DiskAccessMode.mmap);
             chunkCache.ifPresent(builder::withChunkCache);
             summary = new IndexSummaryBuilder(keyCount, metadata().params.minIndexInterval, Downsampling.BASE_SAMPLING_LEVEL);
             bf = FilterFactory.getFilter(keyCount, metadata().params.bloomFilterFpChance);
@@ -666,7 +663,6 @@ public class BigTableWriter extends SSTableWriter
         {
             accumulate = summary.close(accumulate);
             accumulate = bf.close(accumulate);
-            accumulate = builder.close(accumulate);
             return accumulate;
         }
     }
