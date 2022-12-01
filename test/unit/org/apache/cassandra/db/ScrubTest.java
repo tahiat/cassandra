@@ -37,6 +37,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.cassandra.io.sstable.format.CompressionInfoComponent;
 import org.apache.cassandra.io.sstable.format.IScrubber;
+import org.apache.cassandra.io.sstable.format.big.BigTableWriterBuilder;
 import org.apache.cassandra.io.util.File;
 import org.apache.commons.lang3.StringUtils;
 
@@ -86,7 +87,6 @@ import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.OutputHandler;
-import org.apache.cassandra.utils.TimeUUID;
 
 import static org.apache.cassandra.SchemaLoader.counterCFMD;
 import static org.apache.cassandra.SchemaLoader.createKeyspace;
@@ -691,7 +691,24 @@ public class ScrubTest
     {
         SerializationHeader header = new SerializationHeader(true, metadata.get(), metadata.get().regularAndStaticColumns(), EncodingStats.NO_STATS);
         MetadataCollector collector = new MetadataCollector(metadata.get().comparator).sstableLevel(0);
-        return new TestMultiWriter(new TestWriter(descriptor, keyCount, 0, null, false, metadata, collector, header, txn), txn);
+        BigTableWriter writer = new BigTableWriterBuilder(descriptor)
+        {
+            @Override
+            protected BigTableWriter buildInternal()
+            {
+                return new TestWriter(this);
+            }
+        }.setKeyCount(keyCount)
+         .setRepairedAt(0)
+         .setPendingRepair(null)
+         .setTransientSSTable(false)
+         .setTableMetadataRef(metadata)
+         .setMetadataCollector(collector)
+         .setSerializationHeader(header)
+         .setLifecycleNewTracker(txn)
+         .build();
+
+        return new TestMultiWriter(writer, txn);
     }
 
     private static class TestMultiWriter extends SimpleSSTableMultiWriter
@@ -707,16 +724,15 @@ public class ScrubTest
      */
     private static class TestWriter extends BigTableWriter
     {
-        TestWriter(Descriptor descriptor, long keyCount, long repairedAt, TimeUUID pendingRepair, boolean isTransient, TableMetadataRef metadata,
-                   MetadataCollector collector, SerializationHeader header, LifecycleTransaction txn)
+        TestWriter(BigTableWriterBuilder builder)
         {
-            super(descriptor, keyCount, repairedAt, pendingRepair, isTransient, metadata, collector, header, Collections.emptySet(), txn);
+            super(builder);
         }
 
         @Override
         protected long beforeAppend(DecoratedKey decoratedKey)
         {
-            return dataFile.position();
+            return getDataWriterPosition();
         }
     }
 

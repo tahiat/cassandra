@@ -19,12 +19,12 @@
 package org.apache.cassandra.io.sstable.format;
 
 import java.util.*;
+import java.util.function.Consumer;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 
-import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DeletionPurger;
 import org.apache.cassandra.io.sstable.format.big.RowIndexEntry;
@@ -46,6 +46,7 @@ import org.apache.cassandra.io.sstable.metadata.MetadataComponent;
 import org.apache.cassandra.io.sstable.metadata.MetadataType;
 import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.io.util.FileUtils;
+import org.apache.cassandra.io.util.SequentialWriterOption;
 import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.schema.SchemaConstants;
@@ -72,6 +73,7 @@ public abstract class SSTableWriter extends SSTable implements Transactional
     protected final SerializationHeader header;
     protected final TransactionalProxy txnProxy = txnProxy();
     protected final Collection<SSTableFlushObserver> observers;
+    protected final SequentialWriterOption writerOptions;
 
     protected abstract TransactionalProxy txnProxy();
 
@@ -83,25 +85,19 @@ public abstract class SSTableWriter extends SSTable implements Transactional
         protected boolean openResult;
     }
 
-    protected SSTableWriter(Descriptor descriptor,
-                            long keyCount,
-                            long repairedAt,
-                            TimeUUID pendingRepair,
-                            boolean isTransient,
-                            TableMetadataRef metadata,
-                            MetadataCollector metadataCollector,
-                            SerializationHeader header,
-                            Collection<SSTableFlushObserver> observers,
-                            Set<Component> components)
+    protected SSTableWriter(SSTableWriterBuilder<?, ?> builder)
     {
-        super(descriptor, components, metadata, DatabaseDescriptor.getDiskOptimizationStrategy());
-        this.keyCount = keyCount;
-        this.repairedAt = repairedAt;
-        this.pendingRepair = pendingRepair;
-        this.isTransient = isTransient;
-        this.metadataCollector = metadataCollector;
-        this.header = header;
-        this.observers = observers == null ? Collections.emptySet() : observers;
+        super(builder);
+        this.keyCount = builder.getKeyCount();
+        this.repairedAt = builder.getRepairedAt();
+        this.pendingRepair = builder.getPendingRepair();
+        this.isTransient = builder.isTransientSSTable();
+        this.metadataCollector = builder.getMetadataCollector();
+        this.header = builder.getSerializationHeader();
+        this.observers = builder.getFlushObservers();
+        this.writerOptions = builder.getWriterOptions();
+
+        builder.getLifecycleNewTracker().trackNew(this);
     }
 
     public static SSTableWriter create(Descriptor descriptor,
@@ -115,8 +111,19 @@ public abstract class SSTableWriter extends SSTable implements Transactional
                                        Collection<Index> indexes,
                                        LifecycleNewTracker lifecycleNewTracker)
     {
-        Factory writerFactory = descriptor.getFormat().getWriterFactory();
-        return writerFactory.open(descriptor, keyCount, repairedAt, pendingRepair, isTransient, metadata, metadataCollector, header, observers(descriptor, indexes, lifecycleNewTracker.opType()), lifecycleNewTracker);
+        Factory<?, ?> writerFactory = descriptor.getFormat().getWriterFactory();
+        return writerFactory.builder(descriptor)
+                            .setKeyCount(keyCount)
+                            .setRepairedAt(repairedAt)
+                            .setPendingRepair(pendingRepair)
+                            .setTransientSSTable(isTransient)
+                            .setTableMetadataRef(metadata)
+                            .setMetadataCollector(metadataCollector)
+                            .setSerializationHeader(header)
+                            .setLifecycleNewTracker(lifecycleNewTracker)
+                            .setFlushObservers(observers(descriptor, indexes, lifecycleNewTracker.opType()))
+                            .setDefaultComponents()
+                            .build();
     }
 
     public static SSTableWriter create(Descriptor descriptor,
@@ -228,7 +235,7 @@ public abstract class SSTableWriter extends SSTable implements Transactional
     /**
      * Open the resultant SSTableReader before it has been fully written
      */
-    public abstract SSTableReader openEarly();
+    public abstract void openEarly(Consumer<SSTableReader> doWhenReady);
 
     /**
      * Open the resultant SSTableReader once it has been fully written, but before the
@@ -367,20 +374,11 @@ public abstract class SSTableWriter extends SSTable implements Transactional
         long dataSize();
     }
 
-    public static abstract class Factory
+    public interface Factory<W extends SSTableWriter, B extends SSTableWriterBuilder<W, B>>
     {
-        public abstract long estimateSize(SSTableSizeParameters parameters);
+        long estimateSize(SSTableSizeParameters parameters);
 
-        public abstract SSTableWriter open(Descriptor descriptor,
-                                           long keyCount,
-                                           long repairedAt,
-                                           TimeUUID pendingRepair,
-                                           boolean isTransient,
-                                           TableMetadataRef metadata,
-                                           MetadataCollector metadataCollector,
-                                           SerializationHeader header,
-                                           Collection<SSTableFlushObserver> observers,
-                                           LifecycleNewTracker lifecycleNewTracker);
+        B builder(Descriptor descriptor);
     }
 
     public static void guardCollectionSize(TableMetadata metadata, DecoratedKey partitionKey, Unfiltered unfiltered)

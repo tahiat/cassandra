@@ -39,8 +39,8 @@ public class FilterComponent
 {
     private static final Logger logger = LoggerFactory.getLogger(FilterComponent.class);
 
-    private final static boolean rebuildFilterOnFPChanceChange = false;
-    private final static double filterFPChanceTolerance = 0d;
+    final static boolean rebuildFilterOnFPChanceChange = false;
+    final static double filterFPChanceTolerance = 0d;
 
     private FilterComponent()
     {
@@ -142,12 +142,12 @@ public class FilterComponent
         return filter;
     }
 
-    private static boolean shouldUseBloomFilter(double fpChance)
+    static boolean shouldUseBloomFilter(double fpChance)
     {
         return !(Math.abs(1 - fpChance) <= filterFPChanceTolerance);
     }
 
-    private static boolean isFPChanceDiffNeglectable(double fpChance1, double fpChance2)
+    static boolean isFPChanceDiffNeglectable(double fpChance1, double fpChance2)
     {
         return Math.abs(fpChance1 - fpChance2) <= filterFPChanceTolerance;
     }

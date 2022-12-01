@@ -41,7 +41,7 @@ public interface SSTableFormat<R extends SSTableReader, W extends SSTableWriter>
     Version getLatestVersion();
     Version getVersion(String version);
 
-    SSTableWriter.Factory getWriterFactory();
+    SSTableWriter.Factory<W, ?> getWriterFactory();
     SSTableReader.Factory<R, ?> getReaderFactory();
 
     Set<Component> streamingComponents();
@@ -53,6 +53,8 @@ public interface SSTableFormat<R extends SSTableReader, W extends SSTableWriter>
     Set<Component> uploadComponents();
 
     Set<Component> mutableComponents();
+
+    Set<Component> writeComponents();
 
     IScrubber getScrubber(ColumnFamilyStore cfs,
                           LifecycleTransaction transaction,

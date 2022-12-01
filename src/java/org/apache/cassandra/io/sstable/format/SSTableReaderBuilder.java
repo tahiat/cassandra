@@ -24,6 +24,7 @@ import com.google.common.base.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.config.Config;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.io.sstable.Component;
@@ -32,6 +33,7 @@ import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.SSTableBuilder;
 import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
+import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.io.util.FileHandle;
 import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.IFilter;
@@ -172,9 +174,36 @@ public abstract class SSTableReaderBuilder<R extends SSTableReader, B extends SS
         return online;
     }
 
+    public FileHandle.Builder defaultFileHandleBuilder(File file)
+    {
+        FileHandle.Builder builder = new FileHandle.Builder(file);
+        builder.mmapped(getDiskAccessMode() == Config.DiskAccessMode.mmap);
+        builder.withChunkCache(getChunkCache());
+        return builder;
+    }
+
     protected abstract void openComponents() throws IOException;
 
-    public abstract R build();
+    protected abstract R buildInternal();
+
+    public R build()
+    {
+        R reader = buildInternal();
+
+        try
+        {
+            if (isSuspected())
+                reader.markSuspect();
+
+            reader.setup(isOnline());
+        }
+        catch (RuntimeException | Error ex)
+        {
+            JVMStabilityInspector.inspectThrowable(ex);
+            reader.selfRef().release();
+        }
+        return reader;
+    }
 
     public R open(boolean validate)
     {

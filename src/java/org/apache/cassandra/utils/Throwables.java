@@ -190,6 +190,11 @@ public final class Throwables
 
     public static void closeAndAddSuppressed(@Nonnull Throwable t, AutoCloseable... closeables)
     {
+        closeAndAddSuppressed(t, Arrays.asList(closeables));
+    }
+
+    public static void closeAndAddSuppressed(@Nonnull Throwable t, Iterable<AutoCloseable> closeables)
+    {
         Preconditions.checkNotNull(t);
         for (AutoCloseable closeable : closeables)
         {

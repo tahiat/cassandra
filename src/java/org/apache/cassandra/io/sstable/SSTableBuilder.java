@@ -25,6 +25,7 @@ import java.util.Set;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 
+import org.apache.cassandra.cache.ChunkCache;
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.util.DiskOptimizationStrategy;
@@ -45,7 +46,8 @@ public class SSTableBuilder<S extends SSTable, B extends SSTableBuilder<S, B>>
     private TableMetadataRef tableMetadataRef;
     private DiskOptimizationStrategy diskOptimizationStrategy = DatabaseDescriptor.getDiskOptimizationStrategy();
     private double diskOptimizationEstimatePercentile = DatabaseDescriptor.getDiskOptimizationEstimatePercentile();
-    private Config.DiskAccessMode dataFileAccessMode = DatabaseDescriptor.getDiskAccessMode();
+    private Config.DiskAccessMode diskAccessMode = DatabaseDescriptor.getDiskAccessMode();
+    private ChunkCache chunkCache = ChunkCache.instance;
 
     public B setComponents(Collection<Component> components)
     {
@@ -74,9 +76,15 @@ public class SSTableBuilder<S extends SSTable, B extends SSTableBuilder<S, B>>
         return (B) this;
     }
 
-    public B setDataFileAccessMode(Config.DiskAccessMode dataFileAccessMode)
+    public B setDiskAccessMode(Config.DiskAccessMode diskAccessMode)
     {
-        this.dataFileAccessMode = dataFileAccessMode;
+        this.diskAccessMode = diskAccessMode;
+        return (B) this;
+    }
+
+    public B setChunkCache(ChunkCache chunkCache)
+    {
+        this.chunkCache = chunkCache;
         return (B) this;
     }
 
@@ -105,9 +113,14 @@ public class SSTableBuilder<S extends SSTable, B extends SSTableBuilder<S, B>>
         return diskOptimizationEstimatePercentile;
     }
 
-    public Config.DiskAccessMode getDataFileAccessMode()
+    public Config.DiskAccessMode getDiskAccessMode()
     {
-        return dataFileAccessMode;
+        return diskAccessMode;
+    }
+
+    public ChunkCache getChunkCache()
+    {
+        return chunkCache;
     }
 
     public B setDefaultTableMetadata()

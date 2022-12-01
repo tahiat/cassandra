@@ -116,7 +116,7 @@ public abstract class SSTable
         this.metadata = builder.getTableMetadataRef();
         this.diskOptimizationStrategy = builder.getDiskOptimizationStrategy();
         this.diskOptimizationEstimatePercentile = builder.getDiskOptimizationEstimatePercentile();
-        this.dataFileAccessMode = builder.getDataFileAccessMode();
+        this.dataFileAccessMode = builder.getDiskAccessMode();
     }
 
     @VisibleForTesting

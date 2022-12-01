@@ -19,7 +19,6 @@ package org.apache.cassandra.io.sstable.format.big;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.function.BiFunction;
@@ -29,21 +28,15 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.SerializationHeader;
-import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.GaugeProvider;
-import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.format.*;
-import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.net.MessagingService;
-import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.utils.OutputHandler;
-import org.apache.cassandra.utils.TimeUUID;
 
 /**
  * Legacy bigtable format
@@ -82,6 +75,12 @@ public class BigFormat implements SSTableFormat<BigTableReader, BigTableWriter>
     private static final Set<Component> MUTABLE_COMPONENTS = ImmutableSet.of(Component.STATS,
                                                                              Component.SUMMARY);
 
+    private static final Set<Component> WRITE_COMPONENTS = ImmutableSet.of(Component.DATA,
+                                                                           Component.PRIMARY_INDEX,
+                                                                           Component.STATS,
+                                                                           Component.SUMMARY,
+                                                                           Component.TOC,
+                                                                           Component.DIGEST);
 
     private BigFormat()
     {
@@ -107,7 +106,7 @@ public class BigFormat implements SSTableFormat<BigTableReader, BigTableWriter>
     }
 
     @Override
-    public SSTableWriter.Factory getWriterFactory()
+    public SSTableWriter.Factory<BigTableWriter, BigTableWriterBuilder> getWriterFactory()
     {
         return writerFactory;
     }
@@ -172,6 +171,12 @@ public class BigFormat implements SSTableFormat<BigTableReader, BigTableWriter>
         return MUTABLE_COMPONENTS;
     }
 
+    @Override
+    public Set<Component> writeComponents()
+    {
+        return WRITE_COMPONENTS;
+    }
+
     static class KeyCacheValueSerializer implements AbstractRowIndexEntry.KeyCacheValueSerializer<BigTableReader, RowIndexEntry>
     {
         private final static KeyCacheValueSerializer instance = new KeyCacheValueSerializer();
@@ -195,7 +200,7 @@ public class BigFormat implements SSTableFormat<BigTableReader, BigTableWriter>
         }
     }
 
-    static class WriterFactory extends SSTableWriter.Factory
+    static class WriterFactory implements SSTableWriter.Factory<BigTableWriter, BigTableWriterBuilder>
     {
         @Override
         public long estimateSize(SSTableWriter.SSTableSizeParameters parameters)
@@ -207,19 +212,9 @@ public class BigFormat implements SSTableFormat<BigTableReader, BigTableWriter>
         }
 
         @Override
-        public SSTableWriter open(Descriptor descriptor,
-                                  long keyCount,
-                                  long repairedAt,
-                                  TimeUUID pendingRepair,
-                                  boolean isTransient,
-                                  TableMetadataRef metadata,
-                                  MetadataCollector metadataCollector,
-                                  SerializationHeader header,
-                                  Collection<SSTableFlushObserver> observers,
-                                  LifecycleNewTracker lifecycleNewTracker)
+        public BigTableWriterBuilder builder(Descriptor descriptor)
         {
-            SSTable.validateRepairedMetadata(repairedAt, pendingRepair, isTransient);
-            return new BigTableWriter(descriptor, keyCount, repairedAt, pendingRepair, isTransient, metadata, metadataCollector, header, observers, lifecycleNewTracker);
+            return new BigTableWriterBuilder(descriptor);
         }
     }
 

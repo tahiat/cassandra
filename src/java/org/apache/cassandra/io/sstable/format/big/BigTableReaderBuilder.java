@@ -20,12 +20,15 @@ package org.apache.cassandra.io.sstable.format.big;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import com.google.common.collect.Sets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.cache.ChunkCache;
 import org.apache.cassandra.config.Config.DiskAccessMode;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.DecoratedKey;
@@ -96,9 +99,17 @@ public class BigTableReaderBuilder extends SSTableReaderBuilder<BigTableReader, 
         return indexFileAccessMode;
     }
 
+    public Set<AutoCloseable> getCloseables()
+    {
+        return Stream.of(getDataFile(), getIndexFile(), getIndexSummary(), getFilter())
+                     .filter(Objects::nonNull)
+                     .collect(Collectors.toSet());
+    }
+
     @Override
     protected void openComponents() throws IOException
     {
+        Set<AutoCloseable> existingComponents = getCloseables();
         try
         {
             StatsComponent statsComponent = StatsComponent.load(descriptor);
@@ -109,12 +120,12 @@ public class BigTableReaderBuilder extends SSTableReaderBuilder<BigTableReader, 
 
             assert !isOnline() || getSerializationHeader() != null;
 
-            boolean filterNeeded = isOnline() && getComponents().contains(Component.FILTER);
+            boolean filterNeeded = getFilter() == null && isOnline() && getComponents().contains(Component.FILTER);
             if (filterNeeded)
                 loadFilter(statsComponent);
             boolean rebuildFilter = filterNeeded && getFilter() == null;
 
-            boolean summaryNeeded = getComponents().contains(Component.SUMMARY);
+            boolean summaryNeeded = getIndexSummary() == null && getComponents().contains(Component.SUMMARY);
             if (summaryNeeded)
                 loadSummary();
             boolean rebuildSummary = summaryNeeded && getIndexSummary() == null;
@@ -138,29 +149,23 @@ public class BigTableReaderBuilder extends SSTableReaderBuilder<BigTableReader, 
             if (getFilter() == null)
                 setFilter(new AlwaysPresentFilter());
 
-            setupDataFile();
-            setupIndexFile();
+            if (getDataFile() == null)
+                setupDataFile();
+            if (getIndexFile() == null)
+                setupIndexFile();
         }
         catch (IOException | RuntimeException | Error ex)
         {
-            Throwable additionalExceptions = Throwables.close(null, Arrays.asList(getFilter(), getIndexSummary(), getDataFile(), getIndexFile()));
-            if (additionalExceptions != null)
-                ex.addSuppressed(additionalExceptions);
+            // in case of failure, close only those components which have been opened in this try-catch block
+            Throwables.closeAndAddSuppressed(ex, Sets.difference(getCloseables(), existingComponents));
             throw ex;
         }
     }
 
     @Override
-    public BigTableReader build()
+    protected BigTableReader buildInternal()
     {
-        BigTableReader reader = new BigTableReader(this);
-
-        if (isSuspected())
-            reader.markSuspect();
-
-        reader.setup(isOnline());
-
-        return reader;
+        return new BigTableReader(this);
     }
 
     /**
@@ -267,23 +272,24 @@ public class BigTableReaderBuilder extends SSTableReaderBuilder<BigTableReader, 
     private void setupDataFile()
     {
         logger.info("Opening {} ({})", descriptor, FBUtilities.prettyPrintMemory(descriptor.fileFor(Component.DATA).length()));
-        boolean compression = getComponents().contains(Component.COMPRESSION_INFO);
-        FileHandle.Builder dbuilder = new FileHandle.Builder(descriptor.fileFor(Component.DATA));
-        int dataBufferSize = getDiskOptimizationStrategy().bufferSize(getStatsMetadata().estimatedPartitionSize.percentile(getDiskOptimizationEstimatePercentile()));
-        dbuilder.mmapped(getDataFileAccessMode() == DiskAccessMode.mmap);
-        dbuilder.withChunkCache(ChunkCache.instance);
-        dbuilder.bufferSize(dataBufferSize);
-        if (compression)
-            dbuilder.withCompressionMetadata(CompressionInfoComponent.load(descriptor));
-        setDataFile(dbuilder.complete());
+        int bufferSize = getDiskOptimizationStrategy().bufferSize(getStatsMetadata().estimatedPartitionSize.percentile(getDiskOptimizationEstimatePercentile()));
+
+        FileHandle.Builder builder = defaultFileHandleBuilder(descriptor.fileFor(Component.DATA));
+        builder.bufferSize(bufferSize);
+        if (getComponents().contains(Component.COMPRESSION_INFO))
+            builder.withCompressionMetadata(CompressionInfoComponent.load(descriptor));
+        setDataFile(builder.complete());
     }
 
     private void setupIndexFile()
     {
-        FileHandle.Builder ibuilder = new FileHandle.Builder(descriptor.fileFor(Component.PRIMARY_INDEX));
         long indexFileLength = descriptor.fileFor(Component.PRIMARY_INDEX).length();
         int indexBufferSize = getDiskOptimizationStrategy().bufferSize(indexFileLength / getIndexSummary().size());
-        setIndexFile(ibuilder.mmapped(getIndexFileAccessMode() == DiskAccessMode.mmap).withChunkCache(ChunkCache.instance).bufferSize(indexBufferSize).complete());
+
+        FileHandle.Builder builder = defaultFileHandleBuilder(descriptor.fileFor(Component.PRIMARY_INDEX));
+        builder.mmapped(getIndexFileAccessMode() == DiskAccessMode.mmap);
+        builder.bufferSize(indexBufferSize);
+        setIndexFile(builder.complete());
     }
 
     private void validatePartitioner(StatsComponent statsComponent)

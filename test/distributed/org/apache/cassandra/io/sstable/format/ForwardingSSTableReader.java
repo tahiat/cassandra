@@ -85,7 +85,7 @@ public abstract class ForwardingSSTableReader extends SSTableReader
         }
 
         @Override
-        public ForwardingSSTableReader build()
+        public ForwardingSSTableReader buildInternal()
         {
             throw new UnsupportedOperationException();
         }

@@ -33,6 +33,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
@@ -1235,5 +1236,16 @@ public class Util
     public static void flush(TableViews view)
     {
         view.forceBlockingFlush(ColumnFamilyStore.FlushReason.UNIT_TESTS);
+    }
+
+    public static <T> Set<T> refBasedSetsDiff(Set<T> set1, Set<T> set2)
+    {
+        Set<T> result = new HashSet<>(set1.size());
+        for (T e1 : set1)
+        {
+            if (set2.stream().noneMatch(e2 -> e2 == e1))
+                result.add(e1);
+        }
+        return result;
     }
 }

@@ -552,7 +552,7 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
                                                     .setOnline(true)
                                                     .setDiskOptimizationStrategy(diskOptimizationStrategy)
                                                     .setDiskOptimizationEstimatePercentile(diskOptimizationEstimatePercentile)
-                                                    .setDataFileAccessMode(dataFileAccessMode)
+                                                    .setDiskAccessMode(dataFileAccessMode)
                                                     .setIndexFileAccessMode(indexFileAccessMode);
     }
 

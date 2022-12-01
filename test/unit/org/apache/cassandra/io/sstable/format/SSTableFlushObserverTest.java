@@ -27,6 +27,7 @@ import java.util.Iterator;
 import org.apache.cassandra.db.commitlog.CommitLog;
 import org.apache.cassandra.io.sstable.SequenceBasedSSTableId;
 import org.apache.cassandra.io.sstable.format.big.BigTableReader;
+import org.apache.cassandra.io.sstable.format.big.BigTableWriterBuilder;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.schema.ColumnMetadata;
@@ -101,12 +102,13 @@ public class SSTableFlushObserverTest
                                                new SequenceBasedSSTableId(0),
                                                sstableFormat);
 
-        BigTableWriter writer = new BigTableWriter(descriptor,
-                                                   10L, 0L, null, false, TableMetadataRef.forOfflineTools(cfm),
-                                                   new MetadataCollector(cfm.comparator).sstableLevel(0),
-                                                   new SerializationHeader(true, cfm, cfm.regularAndStaticColumns(), EncodingStats.NO_STATS),
-                                                   Collections.singletonList(observer),
-                                                   transaction);
+        BigTableWriter writer = new BigTableWriterBuilder(descriptor).setKeyCount(10)
+                                                                     .setTableMetadataRef(TableMetadataRef.forOfflineTools(cfm))
+                                                                     .setMetadataCollector(new MetadataCollector(cfm.comparator).sstableLevel(0))
+                                                                     .setSerializationHeader(new SerializationHeader(true, cfm, cfm.regularAndStaticColumns(), EncodingStats.NO_STATS))
+                                                                     .setFlushObservers(Collections.singletonList(observer))
+                                                                     .setLifecycleNewTracker(transaction)
+                                                                     .build();
 
         SSTableReader reader = null;
         Multimap<ByteBuffer, Cell<?>> expected = ArrayListMultimap.create();
