@@ -66,6 +66,10 @@ public abstract class Version
      */
     public abstract boolean hasOldBfFormat();
 
+    public abstract boolean hasZeroCopyMetadata();
+
+    public abstract boolean hasIncrementalNodeSyncMetadata();
+
     public abstract boolean hasAccurateMinMax();
 
     public String getVersion()
@@ -115,6 +119,12 @@ public abstract class Version
     {
         return version != null ? version.hashCode() : 0;
     }
+
+    public abstract boolean hasPartitionLevelDeletionsPresenceMarker();
+
+    public abstract boolean hasImprovedMinMax();
+
+    public abstract boolean hasMaxColumnValueLengths();
 
     public abstract boolean hasOriginatingHostId();
 }
