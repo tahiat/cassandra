@@ -32,6 +32,7 @@ import org.apache.cassandra.cache.ChunkCache;
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.db.transform.Transformation;
 import org.apache.cassandra.io.FSWriteError;
@@ -64,9 +65,11 @@ public class BigTableWriter extends SSTableWriter
     private final Optional<ChunkCache> chunkCache = Optional.ofNullable(ChunkCache.instance);
     private final RowIndexEntry.IndexSerializer rowIndexEntrySerializer;
 
-    public BigTableWriter(BigTableWriterBuilder builder)
+    private final BigTableOptions options = new BigTableOptions();
+
+    public BigTableWriter(BigTableWriterBuilder builder, LifecycleNewTracker lifecycleNewTracker)
     {
-        super(builder);
+        super(builder, lifecycleNewTracker);
 
         rowIndexEntrySerializer = new RowIndexEntry.Serializer(descriptor.version, header);
 
@@ -74,7 +77,7 @@ public class BigTableWriter extends SSTableWriter
                                                builder.getTableMetadataRef().getLocal(),
                                                builder.getWriterOptions(),
                                                builder.getMetadataCollector(),
-                                               builder.getLifecycleNewTracker().opType(),
+                                               lifecycleNewTracker.opType(),
                                                builder.getFlushCompression());
 
         indexWriter = new IndexWriter(builder.getKeyCount());
@@ -274,11 +277,9 @@ public class BigTableWriter extends SSTableWriter
                                                                              .setTableMetadataRef(metadata)
                                                                              .setMaxDataAge(maxDataAge)
                                                                              .setSerializationHeader(header)
-                                                                             .setDiskOptimizationStrategy(diskOptimizationStrategy)
                                                                              .setOpenReason(openReason)
                                                                              .setFirst(first)
-                                                                             .setLast(boundary != null ? boundary.lastKey : last)
-                                                                             .setOnline(true);
+                                                                             .setLast(boundary != null ? boundary.lastKey : last);
 
         try
         {
@@ -299,16 +300,16 @@ public class BigTableWriter extends SSTableWriter
             builder.setIndexSummary(indexWriter.summary.build(metadata().partitioner, boundary));
 
             long indexFileLength = descriptor.fileFor(Component.PRIMARY_INDEX).length();
-            int indexBufferSize = diskOptimizationStrategy.bufferSize(indexFileLength / builder.getIndexSummary().size());
+            int indexBufferSize = options.diskOptimizationStrategy.bufferSize(indexFileLength / builder.getIndexSummary().size());
             FileHandle.Builder indexFileBuilder = indexWriter.builder;
             FileHandle indexFile = indexFileBuilder.bufferSize(indexBufferSize)
                                                    .withLengthOverride(boundary != null ? boundary.indexLength : -1)
                                                    .complete();
             builder.setIndexFile(indexFile);
 
-            int dataBufferSize = diskOptimizationStrategy.bufferSize(partitionSizeHistogram.percentile(builder.getDiskOptimizationEstimatePercentile()));
+            int dataBufferSize = options.diskOptimizationStrategy.bufferSize(partitionSizeHistogram.percentile(options.diskOptimizationEstimatePercentile));
             FileHandle.Builder dataFileBuilder = new FileHandle.Builder(descriptor.fileFor(Component.DATA));
-            FileHandle dataFile = dataFileBuilder.mmapped(builder.getDiskAccessMode() == Config.DiskAccessMode.mmap)
+            FileHandle dataFile = dataFileBuilder.mmapped(options.defaultDiskAccessMode == Config.DiskAccessMode.mmap)
                                                  .withChunkCache(chunkCache.orElse(null))
                                                  .withCompressionMetadata(compression ? ((CompressedSequentialWriter) dataWriter).open(boundary != null ? boundary.dataLength : 0) : null)
                                                  .bufferSize(dataBufferSize)
@@ -317,12 +318,12 @@ public class BigTableWriter extends SSTableWriter
             builder.setDataFile(dataFile);
             invalidateCacheAtBoundary(dataFile);
 
-            return builder.build();
+            return builder.build(true, true);
         }
         catch (Throwable t)
         {
             JVMStabilityInspector.inspectThrowable(t);
-            Throwables.closeAndAddSuppressed(t, builder.getCloseables());
+            Throwables.closeAndAddSuppressed(t, builder.getDataFile(), builder.getIndexFile(), builder.getIndexSummary(), builder.getFilter());
             throw t;
         }
     }

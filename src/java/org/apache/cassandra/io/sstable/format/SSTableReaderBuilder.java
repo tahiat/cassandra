@@ -18,33 +18,20 @@
 
 package org.apache.cassandra.io.sstable.format;
 
-import java.io.IOException;
-
 import com.google.common.base.Preconditions;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.config.Config;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.SerializationHeader;
-import org.apache.cassandra.io.sstable.Component;
-import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.SSTableBuilder;
 import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
-import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.io.util.FileHandle;
-import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.IFilter;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 
-import static org.apache.cassandra.io.sstable.format.SSTableReader.OpenReason.NORMAL;
-
 public abstract class SSTableReaderBuilder<R extends SSTableReader, B extends SSTableReaderBuilder<R, B>> extends SSTableBuilder<R, B>
 {
-    private final static Logger logger = LoggerFactory.getLogger(SSTableReaderBuilder.class);
-
     private long maxDataAge;
     private StatsMetadata statsMetadata;
     private SSTableReader.OpenReason openReason;
@@ -54,7 +41,6 @@ public abstract class SSTableReaderBuilder<R extends SSTableReader, B extends SS
     private DecoratedKey first;
     private DecoratedKey last;
     private boolean suspected;
-    private boolean online;
 
     public SSTableReaderBuilder(Descriptor descriptor)
     {
@@ -118,12 +104,6 @@ public abstract class SSTableReaderBuilder<R extends SSTableReader, B extends SS
         return (B) this;
     }
 
-    public B setOnline(boolean online)
-    {
-        this.online = online;
-        return (B) this;
-    }
-
     public long getMaxDataAge()
     {
         return maxDataAge;
@@ -169,24 +149,9 @@ public abstract class SSTableReaderBuilder<R extends SSTableReader, B extends SS
         return suspected;
     }
 
-    public boolean isOnline()
-    {
-        return online;
-    }
-
-    public FileHandle.Builder defaultFileHandleBuilder(File file)
-    {
-        FileHandle.Builder builder = new FileHandle.Builder(file);
-        builder.mmapped(getDiskAccessMode() == Config.DiskAccessMode.mmap);
-        builder.withChunkCache(getChunkCache());
-        return builder;
-    }
-
-    protected abstract void openComponents() throws IOException;
-
     protected abstract R buildInternal();
 
-    public R build()
+    public R build(boolean validate, boolean online)
     {
         R reader = buildInternal();
 
@@ -195,7 +160,10 @@ public abstract class SSTableReaderBuilder<R extends SSTableReader, B extends SS
             if (isSuspected())
                 reader.markSuspect();
 
-            reader.setup(isOnline());
+            reader.setup(online);
+
+            if (validate)
+                reader.validate();
         }
         catch (RuntimeException | Error ex)
         {
@@ -203,57 +171,5 @@ public abstract class SSTableReaderBuilder<R extends SSTableReader, B extends SS
             reader.selfRef().release();
         }
         return reader;
-    }
-
-    public R open(boolean validate)
-    {
-        R reader = null;
-        setOpenReason(NORMAL);
-        setMaxDataAge(Clock.Global.currentTimeMillis());
-        setOnline(online);
-
-        if (getTableMetadataRef() == null)
-            setDefaultTableMetadata();
-
-        if (getComponents() == null)
-            setComponents(TOCComponent.loadOrCreate(descriptor));
-
-        // Minimum components without which we can't do anything
-        assert getComponents().contains(Component.DATA) : "Data component is missing for sstable " + descriptor;
-        assert !validate || getComponents().containsAll(descriptor.getFormat().primaryComponents()) : "Primary index component is missing for sstable " + descriptor;
-
-        CompressionInfoComponent.verifyCompressionInfoExistenceIfApplicable(descriptor, getComponents());
-
-        try
-        {
-            long t0 = Clock.Global.currentTimeMillis();
-
-            openComponents();
-
-            if (logger.isTraceEnabled())
-                logger.trace("SSTable {} loaded in {}ms", descriptor, Clock.Global.currentTimeMillis() - t0);
-
-            reader = build();
-
-            if (validate)
-                reader.validate();
-
-            if (logger.isTraceEnabled() && reader.getKeyCache() != null)
-                logger.trace("key cache contains {}/{} keys", reader.getKeyCache().size(), reader.getKeyCache().getCapacity());
-
-            return reader;
-        }
-        catch (RuntimeException | IOException | Error ex)
-        {
-            if (reader != null)
-                reader.selfRef().release();
-
-            JVMStabilityInspector.inspectThrowable(ex);
-
-            if (ex instanceof CorruptSSTableException)
-                throw (CorruptSSTableException) ex;
-
-            throw new CorruptSSTableException(ex, descriptor.fileFor(Component.DATA));
-        }
     }
 }

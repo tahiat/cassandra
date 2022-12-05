@@ -30,7 +30,6 @@ import org.apache.cassandra.db.Directories;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
-import org.apache.cassandra.io.sstable.SSTableBuilder;
 import org.apache.cassandra.io.sstable.SSTableMultiWriter;
 import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.apache.cassandra.io.sstable.SSTableZeroCopyWriter;
@@ -178,9 +177,11 @@ public class CassandraEntireSSTableStreamReader implements IStreamReader
         Descriptor desc = cfs.newSSTableDescriptor(dataDir, header.version, header.format);
 
         logger.debug("[Table #{}] {} Components to write: {}", cfs.metadata(), desc.filenameFor(Component.DATA), components);
-
-        SSTableBuilder<?, ?> builder = new SSTableBuilder<>(desc).setComponents(components)
-                                                                 .setTableMetadataRef(cfs.metadata);
-        return new SSTableZeroCopyWriter(builder, lifecycleNewTracker);
+        return desc.getFormat()
+                   .getWriterFactory()
+                   .builder(desc)
+                   .setComponents(components)
+                   .setTableMetadataRef(cfs.metadata)
+                   .createZeroCopyWriter(lifecycleNewTracker);
     }
 }

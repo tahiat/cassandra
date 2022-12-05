@@ -64,7 +64,7 @@ public abstract class AbstractRowIndexEntry implements IMeasurableMemory
         return 0;
     }
 
-    public abstract SSTableFormat getSSTableFormat();
+    public abstract SSTableFormat<?, ?> getSSTableFormat();
 
     /**
      * Serialize this entry for key cache

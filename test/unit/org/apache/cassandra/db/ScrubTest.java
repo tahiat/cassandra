@@ -694,9 +694,9 @@ public class ScrubTest
         BigTableWriter writer = new BigTableWriterBuilder(descriptor)
         {
             @Override
-            protected BigTableWriter buildInternal()
+            protected BigTableWriter buildInternal(LifecycleNewTracker lifecycleNewTracker)
             {
-                return new TestWriter(this);
+                return new TestWriter(this, lifecycleNewTracker);
             }
         }.setKeyCount(keyCount)
          .setRepairedAt(0)
@@ -705,8 +705,7 @@ public class ScrubTest
          .setTableMetadataRef(metadata)
          .setMetadataCollector(collector)
          .setSerializationHeader(header)
-         .setLifecycleNewTracker(txn)
-         .build();
+         .build(txn);
 
         return new TestMultiWriter(writer, txn);
     }
@@ -724,9 +723,9 @@ public class ScrubTest
      */
     private static class TestWriter extends BigTableWriter
     {
-        TestWriter(BigTableWriterBuilder builder)
+        TestWriter(BigTableWriterBuilder builder, LifecycleNewTracker lifecycleNewTracker)
         {
-            super(builder);
+            super(builder, lifecycleNewTracker);
         }
 
         @Override

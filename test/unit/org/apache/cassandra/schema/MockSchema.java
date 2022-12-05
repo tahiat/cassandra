@@ -197,8 +197,7 @@ public class MockSchema
                                                                          .setSerializationHeader(header)
                                                                          .setFirst(readerBounds(firstToken))
                                                                          .setLast(readerBounds(lastToken))
-                                                                         .setOnline(false)
-                                                                         .build();
+                                                                         .build(false, false);
             if (!keepRef)
                 reader.selfRef().release();
             return reader;

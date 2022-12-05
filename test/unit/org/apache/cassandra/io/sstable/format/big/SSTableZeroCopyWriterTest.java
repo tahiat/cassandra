@@ -30,7 +30,6 @@ import java.util.function.Function;
 
 import com.google.common.collect.ImmutableSet;
 
-import org.apache.cassandra.io.sstable.SSTableBuilder;
 import org.apache.cassandra.io.sstable.SSTableZeroCopyWriter;
 import org.apache.cassandra.io.util.File;
 import org.junit.BeforeClass;
@@ -158,9 +157,12 @@ public class SSTableZeroCopyWriterTest
         Set<Component> componentsToWrite = ImmutableSet.of(Component.DATA, Component.PRIMARY_INDEX,
                                                            Component.STATS);
 
-        SSTableBuilder<?, ?> builder = new SSTableBuilder<>(desc).setTableMetadataRef(metadata)
-                                                                 .setComponents(componentsToWrite);
-        SSTableZeroCopyWriter btzcw = new SSTableZeroCopyWriter(builder, txn);
+        SSTableZeroCopyWriter btzcw = desc.getFormat()
+                                          .getWriterFactory()
+                                          .builder(desc)
+                                          .setComponents(componentsToWrite)
+                                          .setTableMetadataRef(metadata)
+                                          .createZeroCopyWriter(txn);
 
         for (Component component : componentsToWrite)
         {

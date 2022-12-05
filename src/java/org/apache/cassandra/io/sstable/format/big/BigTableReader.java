@@ -28,7 +28,6 @@ import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.config.Config.DiskAccessMode;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.filter.ClusteringIndexFilter;
 import org.apache.cassandra.db.filter.ColumnFilter;
@@ -70,7 +69,6 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
     private final RowIndexEntry.IndexSerializer rowIndexEntrySerializer;
     private final IndexSummary indexSummary;
     private final FileHandle ifile;
-    private final DiskAccessMode indexFileAccessMode;
 
     public BigTableReader(BigTableReaderBuilder builder)
     {
@@ -78,7 +76,6 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
         this.ifile = builder.getIndexFile();
         this.indexSummary = builder.getIndexSummary();
         this.rowIndexEntrySerializer = new RowIndexEntry.Serializer(descriptor.version, header);
-        this.indexFileAccessMode = builder.getIndexFileAccessMode();
     }
 
     @Override
@@ -548,12 +545,7 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
                                                     .setSerializationHeader(header)
                                                     .setFirst(first)
                                                     .setLast(last)
-                                                    .setSuspected(isSuspect.get())
-                                                    .setOnline(true)
-                                                    .setDiskOptimizationStrategy(diskOptimizationStrategy)
-                                                    .setDiskOptimizationEstimatePercentile(diskOptimizationEstimatePercentile)
-                                                    .setDiskAccessMode(dataFileAccessMode)
-                                                    .setIndexFileAccessMode(indexFileAccessMode);
+                                                    .setSuspected(isSuspect.get());
     }
 
     /**
@@ -584,7 +576,7 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
                                                                                                           .setOpenReason(reason)
                                                                                                           .setFirst(newFirst);
 
-        return builder.build();
+        return builder.build(true, true);
     }
 
     /**
@@ -598,7 +590,7 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
     {
         BigTableReaderBuilder builder = readerBuilderStub(indexSummary != null ? indexSummary.sharedCopy() : null, newBloomFilter).setFilter(newBloomFilter);
 
-        return builder.build();
+        return builder.build(true, true);
     }
 
     public SSTableReader cloneWithRestoredStart(DecoratedKey restoredStart)

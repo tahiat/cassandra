@@ -85,7 +85,7 @@ public abstract class SSTableWriter extends SSTable implements Transactional
         protected boolean openResult;
     }
 
-    protected SSTableWriter(SSTableWriterBuilder<?, ?> builder)
+    protected SSTableWriter(SSTableWriterBuilder<?, ?> builder, LifecycleNewTracker lifecycleNewTracker)
     {
         super(builder);
         this.keyCount = builder.getKeyCount();
@@ -97,7 +97,7 @@ public abstract class SSTableWriter extends SSTable implements Transactional
         this.observers = builder.getFlushObservers();
         this.writerOptions = builder.getWriterOptions();
 
-        builder.getLifecycleNewTracker().trackNew(this);
+        lifecycleNewTracker.trackNew(this);
     }
 
     public static SSTableWriter create(Descriptor descriptor,
@@ -120,10 +120,9 @@ public abstract class SSTableWriter extends SSTable implements Transactional
                             .setTableMetadataRef(metadata)
                             .setMetadataCollector(metadataCollector)
                             .setSerializationHeader(header)
-                            .setLifecycleNewTracker(lifecycleNewTracker)
                             .setFlushObservers(observers(descriptor, indexes, lifecycleNewTracker.opType()))
                             .setDefaultComponents()
-                            .build();
+                            .build(lifecycleNewTracker);
     }
 
     public static SSTableWriter create(Descriptor descriptor,

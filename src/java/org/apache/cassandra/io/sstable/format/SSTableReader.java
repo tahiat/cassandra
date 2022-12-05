@@ -74,7 +74,6 @@ import org.apache.cassandra.utils.*;
 import org.apache.cassandra.utils.concurrent.*;
 
 import static org.apache.cassandra.concurrent.ExecutorFactory.Global.executorFactory;
-import static org.apache.cassandra.db.Directories.SECONDARY_INDEX_NAME_SEPARATOR;
 import static org.apache.cassandra.utils.concurrent.BlockingQueues.newBlockingQueue;
 
 /**
@@ -406,9 +405,8 @@ public abstract class SSTableReader extends SSTable implements UnfilteredSource,
             builder.setComponents(components);
         if (metadata != null)
             builder.setTableMetadataRef(metadata);
-        builder.setOnline(!isOffline);
 
-        return builder.open(validate);
+        return builder.build(validate, !isOffline);
     }
 
     public static Collection<SSTableReader> openAll(Set<Map.Entry<Descriptor, Set<Component>>> entries,
@@ -1626,6 +1624,8 @@ public abstract class SSTableReader extends SSTable implements UnfilteredSource,
     public interface Factory<R extends SSTableReader, B extends SSTableReaderBuilder<R, B>>
     {
         SSTableReaderBuilder<R, B> builder(Descriptor descriptor);
+
+        SSTableReaderLoadingBuilder<R, B> builder(Descriptor descriptor, TableMetadataRef tableMetadataRef, Set<Component> components);
     }
 
     public static class PartitionPositionBounds

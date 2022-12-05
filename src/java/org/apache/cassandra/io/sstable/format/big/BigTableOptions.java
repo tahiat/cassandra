@@ -18,20 +18,17 @@
 
 package org.apache.cassandra.io.sstable.format.big;
 
-import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
-import org.apache.cassandra.io.sstable.Descriptor;
-import org.apache.cassandra.io.sstable.format.SSTableWriterBuilder;
+import org.apache.cassandra.cache.ChunkCache;
+import org.apache.cassandra.config.Config;
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.io.util.DiskOptimizationStrategy;
 
-public class BigTableWriterBuilder extends SSTableWriterBuilder<BigTableWriter, BigTableWriterBuilder>
+public class BigTableOptions
 {
-    public BigTableWriterBuilder(Descriptor descriptor)
-    {
-        super(descriptor);
-    }
+    public final DiskOptimizationStrategy diskOptimizationStrategy = DatabaseDescriptor.getDiskOptimizationStrategy();
+    public final ChunkCache chunkCache = ChunkCache.instance;
+    public final Config.DiskAccessMode defaultDiskAccessMode = DatabaseDescriptor.getDiskAccessMode();
+    public final Config.DiskAccessMode indexDiskAccessMode = DatabaseDescriptor.getIndexAccessMode();
+    public final double diskOptimizationEstimatePercentile = DatabaseDescriptor.getDiskOptimizationEstimatePercentile();
 
-    @Override
-    protected BigTableWriter buildInternal(LifecycleNewTracker lifecycleNewTracker)
-    {
-        return new BigTableWriter(this, lifecycleNewTracker);
-    }
 }

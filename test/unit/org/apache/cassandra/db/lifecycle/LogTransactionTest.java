@@ -1293,8 +1293,7 @@ public class LogTransactionTest extends AbstractTransactionalTest
                                 .setSerializationHeader(header)
                                 .setFirst(MockSchema.readerBounds(generation))
                                 .setLast(MockSchema.readerBounds(generation))
-                                .setOnline(false)
-                                .build();
+                                .build(false, false);
         return reader;
     }
 

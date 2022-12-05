@@ -248,7 +248,7 @@ public class FileHandle extends SharedCloseableImpl
      */
     public static class Builder
     {
-        private final File file;
+        public final File file;
 
         private Function<File, ChannelProxy> channelProxyFactory = ChannelProxy::new;
         private CompressionMetadata compressionMetadata;

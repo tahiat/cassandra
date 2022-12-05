@@ -81,7 +81,6 @@ public abstract class ForwardingSSTableReader extends SSTableReader
             setFilter(delegate.bf);
             setFirst(delegate.first);
             setLast(delegate.last);
-            setOnline(delegate.getReadMeter() != null);
         }
 
         @Override
@@ -90,11 +89,6 @@ public abstract class ForwardingSSTableReader extends SSTableReader
             throw new UnsupportedOperationException();
         }
 
-        @Override
-        protected void openComponents()
-        {
-            throw new UnsupportedOperationException();
-        }
     }
 
     public ForwardingSSTableReader(SSTableReader delegate)

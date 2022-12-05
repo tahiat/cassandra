@@ -18,15 +18,20 @@
 */
 package org.apache.cassandra.utils;
 
+import net.openhft.chronicle.core.util.ThrowingCallable;
 import org.apache.cassandra.io.util.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Predicate;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 import javax.annotation.Nonnull;
@@ -209,6 +214,11 @@ public final class Throwables
         }
     }
 
+    public static Throwable close(Throwable accumulate, AutoCloseable... closeables)
+    {
+        return close(accumulate, Arrays.asList(closeables));
+    }
+
     public static Throwable close(Throwable accumulate, Iterable<? extends AutoCloseable> closeables)
     {
         for (AutoCloseable closeable : closeables)
@@ -292,4 +302,42 @@ public final class Throwables
     {
         return unchecked(unwrapped(t));
     }
+
+    public static <T> Collection<T> refBasedSetsDiff(Collection<T> c1, Collection<T> c2)
+    {
+        List<T> result = new ArrayList<>(c1.size());
+        for (T e1 : c1)
+        {
+            if (e1 == null)
+                continue;
+
+            if (c2.stream().noneMatch(e2 -> e2 == e1))
+                result.add(e1);
+        }
+        return result;
+    }
+
+    public static <R, T extends Exception> R maybeCloseAfterUse(boolean closeWhenSucceeded,
+                                                                Supplier<Collection<AutoCloseable>> resourcesSupplier,
+                                                                ThrowingCallable<R, T> callable) throws T
+    {
+        Collection<AutoCloseable> existingComponents = resourcesSupplier.get();
+        try
+        {
+            return callable.call();
+        }
+        catch (Throwable ex)
+        {
+            if (!closeWhenSucceeded)
+                Throwables.closeAndAddSuppressed(ex, refBasedSetsDiff(resourcesSupplier.get(), existingComponents));
+            throw ex;
+        }
+        finally
+        {
+            if (closeWhenSucceeded)
+                Throwables.throwAsUncheckedException(Throwables.close(null, refBasedSetsDiff(resourcesSupplier.get(), existingComponents)));
+        }
+    }
+
+
 }

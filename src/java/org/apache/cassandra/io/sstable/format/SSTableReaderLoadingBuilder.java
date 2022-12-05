@@ -1,0 +1,134 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.cassandra.io.sstable.format;
+
+import java.io.IOException;
+import java.util.Set;
+
+import com.google.common.collect.ImmutableSet;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import org.apache.cassandra.io.sstable.Component;
+import org.apache.cassandra.io.sstable.CorruptSSTableException;
+import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.KeyReader;
+import org.apache.cassandra.schema.Schema;
+import org.apache.cassandra.schema.TableMetadataRef;
+import org.apache.cassandra.utils.Clock;
+import org.apache.cassandra.utils.JVMStabilityInspector;
+
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.cassandra.db.Directories.SECONDARY_INDEX_NAME_SEPARATOR;
+import static org.apache.cassandra.io.sstable.format.SSTableReader.OpenReason.NORMAL;
+
+public abstract class SSTableReaderLoadingBuilder<R extends SSTableReader, B extends SSTableReaderBuilder<R, B>>
+{
+    private final static Logger logger = LoggerFactory.getLogger(SSTableReaderLoadingBuilder.class);
+
+    protected final Descriptor descriptor;
+    protected final Set<Component> components;
+    protected final TableMetadataRef tableMetadataRef;
+
+    public SSTableReaderLoadingBuilder(Descriptor descriptor, Set<Component> components, TableMetadataRef tableMetadataRef)
+    {
+        checkNotNull(descriptor);
+
+        this.descriptor = descriptor;
+        this.components = components != null ? ImmutableSet.copyOf(components) : TOCComponent.loadOrCreate(descriptor);
+        this.tableMetadataRef = tableMetadataRef != null ? tableMetadataRef : resolveTableMetadataRef();
+
+        checkNotNull(this.components);
+        checkNotNull(this.tableMetadataRef);
+        checkArgument(this.tableMetadataRef.getLocal().keyspace.equals(this.descriptor.ksname) && this.tableMetadataRef.getLocal().name.equals(this.descriptor.cfname));
+    }
+
+    public R build(boolean validate, boolean online)
+    {
+        B builder = (B) descriptor.formatType.info.getReaderFactory().builder(descriptor);
+        builder.setOpenReason(NORMAL);
+        builder.setMaxDataAge(Clock.Global.currentTimeMillis());
+        builder.setTableMetadataRef(tableMetadataRef);
+        builder.setComponents(components);
+
+        // Minimum components without which we can't do anything
+        assert builder.getComponents().contains(Component.DATA) : "Data component is missing for sstable " + descriptor;
+        assert !validate || builder.getComponents().containsAll(descriptor.getFormat().primaryComponents()) : "Primary index component is missing for sstable " + descriptor;
+
+        R reader = null;
+
+        try
+        {
+            CompressionInfoComponent.verifyCompressionInfoExistenceIfApplicable(descriptor, builder.getComponents());
+
+            long t0 = Clock.Global.currentTimeMillis();
+
+            openComponents(builder, validate, online);
+
+            if (logger.isTraceEnabled())
+                logger.trace("SSTable {} loaded in {}ms", descriptor, Clock.Global.currentTimeMillis() - t0);
+
+            reader = builder.build(validate, online);
+            if (validate)
+                reader.validate();
+
+            if (logger.isTraceEnabled() && reader.getKeyCache() != null)
+                logger.trace("key cache contains {}/{} keys", reader.getKeyCache().size(), reader.getKeyCache().getCapacity());
+
+            return reader;
+        }
+        catch (RuntimeException | IOException | Error ex)
+        {
+            if (reader != null)
+                reader.selfRef().release();
+
+            JVMStabilityInspector.inspectThrowable(ex);
+
+            if (ex instanceof CorruptSSTableException)
+                throw (CorruptSSTableException) ex;
+
+            throw new CorruptSSTableException(ex, descriptor.baseFilename());
+        }
+    }
+
+    public abstract KeyReader buildKeyReader() throws IOException;
+
+    protected abstract void openComponents(B builder, boolean validate, boolean online) throws IOException;
+
+    private TableMetadataRef resolveTableMetadataRef()
+    {
+        TableMetadataRef metadata;
+        if (descriptor.cfname.contains(SECONDARY_INDEX_NAME_SEPARATOR))
+        {
+            int i = descriptor.cfname.indexOf(SECONDARY_INDEX_NAME_SEPARATOR);
+            String indexName = descriptor.cfname.substring(i + 1);
+            metadata = Schema.instance.getIndexTableMetadataRef(descriptor.ksname, indexName);
+            if (metadata == null)
+                throw new AssertionError("Could not find index metadata for index cf " + i);
+        }
+        else
+        {
+            metadata = Schema.instance.getTableMetadataRef(descriptor.ksname, descriptor.cfname);
+        }
+
+        return metadata;
+    }
+
+}

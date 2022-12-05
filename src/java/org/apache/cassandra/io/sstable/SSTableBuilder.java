@@ -25,16 +25,9 @@ import java.util.Set;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 
-import org.apache.cassandra.cache.ChunkCache;
-import org.apache.cassandra.config.Config;
-import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.io.util.DiskOptimizationStrategy;
-import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.schema.TableMetadataRef;
 
-import static org.apache.cassandra.db.Directories.SECONDARY_INDEX_NAME_SEPARATOR;
-
-public class SSTableBuilder<S extends SSTable, B extends SSTableBuilder<S, B>>
+public abstract class SSTableBuilder<S extends SSTable, B extends SSTableBuilder<S, B>>
 {
     public SSTableBuilder(Descriptor descriptor)
     {
@@ -44,10 +37,6 @@ public class SSTableBuilder<S extends SSTable, B extends SSTableBuilder<S, B>>
     public final Descriptor descriptor;
     private Set<Component> components;
     private TableMetadataRef tableMetadataRef;
-    private DiskOptimizationStrategy diskOptimizationStrategy = DatabaseDescriptor.getDiskOptimizationStrategy();
-    private double diskOptimizationEstimatePercentile = DatabaseDescriptor.getDiskOptimizationEstimatePercentile();
-    private Config.DiskAccessMode diskAccessMode = DatabaseDescriptor.getDiskAccessMode();
-    private ChunkCache chunkCache = ChunkCache.instance;
 
     public B setComponents(Collection<Component> components)
     {
@@ -64,30 +53,6 @@ public class SSTableBuilder<S extends SSTable, B extends SSTableBuilder<S, B>>
         return (B) this;
     }
 
-    public B setDiskOptimizationStrategy(DiskOptimizationStrategy diskOptimizationStrategy)
-    {
-        this.diskOptimizationStrategy = diskOptimizationStrategy;
-        return (B) this;
-    }
-
-    public B setDiskOptimizationEstimatePercentile(double diskOptimizationEstimatePercentile)
-    {
-        this.diskOptimizationEstimatePercentile = diskOptimizationEstimatePercentile;
-        return (B) this;
-    }
-
-    public B setDiskAccessMode(Config.DiskAccessMode diskAccessMode)
-    {
-        this.diskAccessMode = diskAccessMode;
-        return (B) this;
-    }
-
-    public B setChunkCache(ChunkCache chunkCache)
-    {
-        this.chunkCache = chunkCache;
-        return (B) this;
-    }
-
     public Descriptor getDescriptor()
     {
         return descriptor;
@@ -101,44 +66,6 @@ public class SSTableBuilder<S extends SSTable, B extends SSTableBuilder<S, B>>
     public TableMetadataRef getTableMetadataRef()
     {
         return tableMetadataRef;
-    }
-
-    public DiskOptimizationStrategy getDiskOptimizationStrategy()
-    {
-        return diskOptimizationStrategy;
-    }
-
-    public double getDiskOptimizationEstimatePercentile()
-    {
-        return diskOptimizationEstimatePercentile;
-    }
-
-    public Config.DiskAccessMode getDiskAccessMode()
-    {
-        return diskAccessMode;
-    }
-
-    public ChunkCache getChunkCache()
-    {
-        return chunkCache;
-    }
-
-    public B setDefaultTableMetadata()
-    {
-        TableMetadataRef metadata;
-        if (descriptor.cfname.contains(SECONDARY_INDEX_NAME_SEPARATOR))
-        {
-            int i = descriptor.cfname.indexOf(SECONDARY_INDEX_NAME_SEPARATOR);
-            String indexName = descriptor.cfname.substring(i + 1);
-            metadata = Schema.instance.getIndexTableMetadataRef(descriptor.ksname, indexName);
-            if (metadata == null)
-                throw new AssertionError("Could not find index metadata for index cf " + i);
-        }
-        else
-        {
-            metadata = Schema.instance.getTableMetadataRef(descriptor.ksname, descriptor.cfname);
-        }
-        return setTableMetadataRef(metadata);
     }
 
 }

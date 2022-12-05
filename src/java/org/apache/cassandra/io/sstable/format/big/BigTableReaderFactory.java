@@ -18,17 +18,39 @@
 
 package org.apache.cassandra.io.sstable.format.big;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import java.util.Set;
 
+import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.io.sstable.format.SSTableReaderLoadingBuilder;
+import org.apache.cassandra.schema.TableMetadataRef;
 
 class BigTableReaderFactory implements SSTableReader.Factory<BigTableReader, BigTableReaderBuilder>
 {
+    public final BigTableOptions options;
+
+    public BigTableReaderFactory(BigTableOptions options)
+    {
+        this.options = options;
+    }
+
+    public BigTableReaderFactory()
+    {
+        this(new BigTableOptions());
+    }
+
     @Override
     public BigTableReaderBuilder builder(Descriptor descriptor)
     {
         return new BigTableReaderBuilder(descriptor);
+    }
+
+    @Override
+    public SSTableReaderLoadingBuilder<BigTableReader, BigTableReaderBuilder> builder(Descriptor descriptor,
+                                                                                      TableMetadataRef tableMetadataRef,
+                                                                                      Set<Component> components)
+    {
+        return new BigSSTableReaderLoadingBuilder(descriptor, components, tableMetadataRef, options);
     }
 }

@@ -294,6 +294,7 @@ public class BigFormat implements SSTableFormat<BigTableReader, BigTableWriter>
             return hasCommitLogIntervals;
         }
 
+        @Override
         public boolean hasPendingRepair()
         {
             return hasPendingRepair;

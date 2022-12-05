@@ -32,6 +32,7 @@ import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.SSTableBuilder;
+import org.apache.cassandra.io.sstable.SSTableZeroCopyWriter;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.util.SequentialWriterOption;
 import org.apache.cassandra.utils.TimeUUID;
@@ -49,7 +50,6 @@ public abstract class SSTableWriterBuilder<W extends SSTableWriter, B extends SS
     private boolean transientSSTable;
     private SerializationHeader serializationHeader;
     private Collection<SSTableFlushObserver> flushObservers;
-    private LifecycleNewTracker lifecycleNewTracker;
     private FlushCompression flushCompression = DatabaseDescriptor.getFlushCompression();
 
     public B setWriterOptions(SequentialWriterOption writerOptions)
@@ -97,12 +97,6 @@ public abstract class SSTableWriterBuilder<W extends SSTableWriter, B extends SS
     public B setFlushObservers(Collection<SSTableFlushObserver> flushObservers)
     {
         this.flushObservers = ImmutableList.copyOf(flushObservers);
-        return (B) this;
-    }
-
-    public B setLifecycleNewTracker(LifecycleNewTracker lifecycleNewTracker)
-    {
-        this.lifecycleNewTracker = lifecycleNewTracker;
         return (B) this;
     }
 
@@ -177,11 +171,6 @@ public abstract class SSTableWriterBuilder<W extends SSTableWriter, B extends SS
         return flushObservers;
     }
 
-    public LifecycleNewTracker getLifecycleNewTracker()
-    {
-        return lifecycleNewTracker;
-    }
-
     public FlushCompression getFlushCompression()
     {
         return flushCompression;
@@ -192,15 +181,20 @@ public abstract class SSTableWriterBuilder<W extends SSTableWriter, B extends SS
         super(descriptor);
     }
 
-    public W build()
+    public W build(LifecycleNewTracker lifecycleNewTracker)
     {
         if (getComponents() == null)
             setDefaultComponents();
 
         SSTable.validateRepairedMetadata(getRepairedAt(), getPendingRepair(), isTransientSSTable());
 
-        return buildInternal();
+        return buildInternal(lifecycleNewTracker);
     }
 
-    protected abstract W buildInternal();
+    protected abstract W buildInternal(LifecycleNewTracker lifecycleNewTracker);
+
+    public SSTableZeroCopyWriter createZeroCopyWriter(LifecycleNewTracker lifecycleNewTracker)
+    {
+        return new SSTableZeroCopyWriter(this, lifecycleNewTracker);
+    }
 }
