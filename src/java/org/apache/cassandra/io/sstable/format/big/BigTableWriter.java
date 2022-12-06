@@ -53,7 +53,7 @@ public class BigTableWriter extends SSTableWriter
 {
     private static final Logger logger = LoggerFactory.getLogger(BigTableWriter.class);
 
-    private final ColumnIndex columnIndexWriter;
+    private final BigFormatPartitionWriter partitionWriter;
     private final IndexWriter indexWriter;
     private final SequentialWriter dataWriter;
 
@@ -79,11 +79,11 @@ public class BigTableWriter extends SSTableWriter
 
         indexWriter = new IndexWriter(builder.getKeyCount());
 
-        columnIndexWriter = new ColumnIndex(builder.getSerializationHeader(),
-                                            dataWriter,
-                                            builder.getDescriptor().version,
-                                            builder.getFlushObservers(),
-                                            rowIndexEntrySerializer.indexInfoSerializer());
+        partitionWriter = new BigFormatPartitionWriter(builder.getSerializationHeader(),
+                                                       dataWriter,
+                                                       builder.getDescriptor().version,
+                                                       builder.getFlushObservers(),
+                                                       rowIndexEntrySerializer.indexInfoSerializer());
     }
 
     public void mark()
@@ -154,11 +154,11 @@ public class BigTableWriter extends SSTableWriter
         observers.forEach((o) -> o.startPartition(key, indexWriter.writer.position()));
 
         //Reuse the writer for each row
-        columnIndexWriter.reset(DatabaseDescriptor.getColumnIndexCacheSize(), DatabaseDescriptor.getColumnIndexSize());
+        partitionWriter.reset(DatabaseDescriptor.getColumnIndexCacheSize(), DatabaseDescriptor.getColumnIndexSize());
 
         try (UnfilteredRowIterator collecting = Transformation.apply(iterator, new StatsCollector(metadataCollector)))
         {
-            columnIndexWriter.buildRowIndex(collecting);
+            partitionWriter.buildRowIndex(collecting);
 
             // afterAppend() writes the partition key before the first RowIndexEntry - so we have to add it's
             // serialized size to the index-writer position
@@ -166,11 +166,11 @@ public class BigTableWriter extends SSTableWriter
 
             RowIndexEntry entry = RowIndexEntry.create(startPosition, indexFilePosition,
                                                        collecting.partitionLevelDeletion(),
-                                                       columnIndexWriter.headerLength,
-                                                       columnIndexWriter.columnIndexCount,
-                                                       columnIndexWriter.indexInfoSerializedSize(),
-                                                       columnIndexWriter.indexSamples(),
-                                                       columnIndexWriter.offsets(),
+                                                       partitionWriter.headerLength,
+                                                       partitionWriter.columnIndexCount,
+                                                       partitionWriter.indexInfoSerializedSize(),
+                                                       partitionWriter.indexSamples(),
+                                                       partitionWriter.offsets(),
                                                        rowIndexEntrySerializer.indexInfoSerializer());
 
             long endPosition = dataWriter.position();
@@ -178,7 +178,7 @@ public class BigTableWriter extends SSTableWriter
             maybeLogLargePartitionWarning(key, rowSize);
             maybeLogManyTombstonesWarning(key, metadataCollector.totalTombstones);
             metadataCollector.addPartitionSizeInBytes(rowSize);
-            afterAppend(key, endPosition, entry, columnIndexWriter.buffer());
+            afterAppend(key, endPosition, entry, partitionWriter.buffer());
             return entry;
         }
         catch (BufferOverflowException boe)

@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.cassandra.db;
+package org.apache.cassandra.io.sstable.format.big;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -24,13 +24,16 @@ import java.util.*;
 
 import com.google.common.primitives.Ints;
 
+import org.apache.cassandra.db.ClusteringPrefix;
+import org.apache.cassandra.db.DeletionTime;
+import org.apache.cassandra.db.SerializationHeader;
+import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.io.ISerializer;
 import org.apache.cassandra.io.sstable.IndexInfo;
 import org.apache.cassandra.io.sstable.format.SSTableFlushObserver;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.io.sstable.format.Version;
-import org.apache.cassandra.io.sstable.format.big.RowIndexEntry;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.io.util.SequentialWriter;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -40,7 +43,7 @@ import org.apache.cassandra.utils.ByteBufferUtil;
  * For index entries that exceed {@link org.apache.cassandra.config.Config#column_index_cache_size},
  * this uses the serialization logic as in {@link RowIndexEntry}.
  */
-public class ColumnIndex
+public class BigFormatPartitionWriter
 {
     // used, if the row-index-entry reaches config column_index_cache_size
     private DataOutputBuffer buffer;
@@ -76,11 +79,11 @@ public class ColumnIndex
 
     private final Collection<SSTableFlushObserver> observers;
 
-    public ColumnIndex(SerializationHeader header,
-                       SequentialWriter writer,
-                       Version version,
-                       Collection<SSTableFlushObserver> observers,
-                       ISerializer<IndexInfo> indexInfoSerializer)
+    public BigFormatPartitionWriter(SerializationHeader header,
+                                    SequentialWriter writer,
+                                    Version version,
+                                    Collection<SSTableFlushObserver> observers,
+                                    ISerializer<IndexInfo> indexInfoSerializer)
     {
         this.helper = new SerializationHelper(header);
         this.header = header;
