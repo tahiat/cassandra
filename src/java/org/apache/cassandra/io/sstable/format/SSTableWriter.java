@@ -46,7 +46,6 @@ import org.apache.cassandra.io.sstable.metadata.MetadataComponent;
 import org.apache.cassandra.io.sstable.metadata.MetadataType;
 import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.io.util.FileUtils;
-import org.apache.cassandra.io.util.SequentialWriterOption;
 import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.schema.SchemaConstants;
@@ -73,7 +72,6 @@ public abstract class SSTableWriter extends SSTable implements Transactional
     protected final SerializationHeader header;
     protected final TransactionalProxy txnProxy = txnProxy();
     protected final Collection<SSTableFlushObserver> observers;
-    protected final SequentialWriterOption writerOptions;
 
     protected abstract TransactionalProxy txnProxy();
 
@@ -95,7 +93,6 @@ public abstract class SSTableWriter extends SSTable implements Transactional
         this.metadataCollector = builder.getMetadataCollector();
         this.header = builder.getSerializationHeader();
         this.observers = builder.getFlushObservers();
-        this.writerOptions = builder.getWriterOptions();
 
         lifecycleNewTracker.trackNew(this);
     }

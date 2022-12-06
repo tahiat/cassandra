@@ -25,6 +25,7 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.cache.ChunkCache;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.io.sstable.Component;
@@ -62,13 +63,20 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
 
     private final BigTableOptions options;
 
+    private final ChunkCache chunkCache;
+
     private FileHandle.Builder dataFileBuilder;
     private FileHandle.Builder indexFileBuilder;
 
-    public BigSSTableReaderLoadingBuilder(Descriptor descriptor, Set<Component> components, TableMetadataRef tableMetadataRef, BigTableOptions options)
+    public BigSSTableReaderLoadingBuilder(Descriptor descriptor,
+                                          Set<Component> components,
+                                          TableMetadataRef tableMetadataRef,
+                                          BigTableOptions options,
+                                          ChunkCache chunkCache)
     {
         super(descriptor, components, tableMetadataRef);
         this.options = options;
+        this.chunkCache = chunkCache;
     }
 
     @Override
@@ -316,7 +324,7 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
             dataFileBuilder = new FileHandle.Builder(descriptor.fileFor(Component.DATA));
 
         dataFileBuilder.bufferSize(bufferSize);
-        dataFileBuilder.withChunkCache(options.chunkCache);
+        dataFileBuilder.withChunkCache(chunkCache);
         dataFileBuilder.mmapped(options.defaultDiskAccessMode);
         if (components.contains(Component.COMPRESSION_INFO))
             dataFileBuilder.withCompressionMetadata(CompressionInfoComponent.load(descriptor));
@@ -336,7 +344,7 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
             indexFileBuilder = new FileHandle.Builder(descriptor.fileFor(Component.PRIMARY_INDEX)).bufferSize(indexBufferSize.orElse(DiskOptimizationStrategy.MAX_BUFFER_SIZE));
 
         indexBufferSize.ifPresent(indexFileBuilder::bufferSize);
-        indexFileBuilder.withChunkCache(options.chunkCache);
+        indexFileBuilder.withChunkCache(chunkCache);
         indexFileBuilder.mmapped(options.indexDiskAccessMode);
 
         return indexFileBuilder;

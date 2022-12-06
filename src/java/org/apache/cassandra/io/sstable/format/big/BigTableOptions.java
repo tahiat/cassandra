@@ -18,17 +18,20 @@
 
 package org.apache.cassandra.io.sstable.format.big;
 
-import org.apache.cassandra.cache.ChunkCache;
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.util.DiskOptimizationStrategy;
+import org.apache.cassandra.io.util.SequentialWriterOption;
 
 public class BigTableOptions
 {
     public final DiskOptimizationStrategy diskOptimizationStrategy = DatabaseDescriptor.getDiskOptimizationStrategy();
-    public final ChunkCache chunkCache = ChunkCache.instance;
     public final Config.DiskAccessMode defaultDiskAccessMode = DatabaseDescriptor.getDiskAccessMode();
     public final Config.DiskAccessMode indexDiskAccessMode = DatabaseDescriptor.getIndexAccessMode();
     public final double diskOptimizationEstimatePercentile = DatabaseDescriptor.getDiskOptimizationEstimatePercentile();
-
+    public final SequentialWriterOption writerOptions = SequentialWriterOption.newBuilder()
+                                                                              .trickleFsync(DatabaseDescriptor.getTrickleFsync())
+                                                                              .trickleFsyncByteInterval(DatabaseDescriptor.getTrickleFsyncIntervalInKiB() * 1024)
+                                                                              .build();
+    public final Config.FlushCompression flushCompression = DatabaseDescriptor.getFlushCompression();
 }

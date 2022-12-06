@@ -34,15 +34,10 @@ import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.SSTableBuilder;
 import org.apache.cassandra.io.sstable.SSTableZeroCopyWriter;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
-import org.apache.cassandra.io.util.SequentialWriterOption;
 import org.apache.cassandra.utils.TimeUUID;
 
 public abstract class SSTableWriterBuilder<W extends SSTableWriter, B extends SSTableWriterBuilder<W, B>> extends SSTableBuilder<W, B>
 {
-    private SequentialWriterOption writerOptions = SequentialWriterOption.newBuilder()
-                                                                         .trickleFsync(DatabaseDescriptor.getTrickleFsync())
-                                                                         .trickleFsyncByteInterval(DatabaseDescriptor.getTrickleFsyncIntervalInKiB() * 1024)
-                                                                         .build();
     private MetadataCollector metadataCollector;
     private long keyCount;
     private long repairedAt;
@@ -51,12 +46,6 @@ public abstract class SSTableWriterBuilder<W extends SSTableWriter, B extends SS
     private SerializationHeader serializationHeader;
     private Collection<SSTableFlushObserver> flushObservers;
     private FlushCompression flushCompression = DatabaseDescriptor.getFlushCompression();
-
-    public B setWriterOptions(SequentialWriterOption writerOptions)
-    {
-        this.writerOptions = writerOptions;
-        return (B) this;
-    }
 
     public B setMetadataCollector(MetadataCollector metadataCollector)
     {
@@ -129,11 +118,6 @@ public abstract class SSTableWriterBuilder<W extends SSTableWriter, B extends SS
         setComponents(components);
 
         return (B) this;
-    }
-
-    public SequentialWriterOption getWriterOptions()
-    {
-        return writerOptions;
     }
 
     public MetadataCollector getMetadataCollector()

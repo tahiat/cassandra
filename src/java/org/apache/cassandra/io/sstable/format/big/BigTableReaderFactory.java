@@ -20,6 +20,7 @@ package org.apache.cassandra.io.sstable.format.big;
 
 import java.util.Set;
 
+import org.apache.cassandra.cache.ChunkCache;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
@@ -29,15 +30,17 @@ import org.apache.cassandra.schema.TableMetadataRef;
 class BigTableReaderFactory implements SSTableReader.Factory<BigTableReader, BigTableReaderBuilder>
 {
     public final BigTableOptions options;
+    public final ChunkCache chunkCache;
 
-    public BigTableReaderFactory(BigTableOptions options)
+    public BigTableReaderFactory(BigTableOptions options, ChunkCache chunkCache)
     {
         this.options = options;
+        this.chunkCache = chunkCache;
     }
 
     public BigTableReaderFactory()
     {
-        this(new BigTableOptions());
+        this(new BigTableOptions(), ChunkCache.instance);
     }
 
     @Override
@@ -51,6 +54,6 @@ class BigTableReaderFactory implements SSTableReader.Factory<BigTableReader, Big
                                                                                       TableMetadataRef tableMetadataRef,
                                                                                       Set<Component> components)
     {
-        return new BigSSTableReaderLoadingBuilder(descriptor, components, tableMetadataRef, options);
+        return new BigSSTableReaderLoadingBuilder(descriptor, components, tableMetadataRef, options, chunkCache);
     }
 }

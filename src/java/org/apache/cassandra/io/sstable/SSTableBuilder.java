@@ -25,6 +25,7 @@ import java.util.Set;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 
+import org.apache.cassandra.cache.ChunkCache;
 import org.apache.cassandra.schema.TableMetadataRef;
 
 public abstract class SSTableBuilder<S extends SSTable, B extends SSTableBuilder<S, B>>
@@ -37,6 +38,7 @@ public abstract class SSTableBuilder<S extends SSTable, B extends SSTableBuilder
     public final Descriptor descriptor;
     private Set<Component> components;
     private TableMetadataRef tableMetadataRef;
+    private ChunkCache chunkCache = ChunkCache.instance;
 
     public B setComponents(Collection<Component> components)
     {
@@ -50,6 +52,12 @@ public abstract class SSTableBuilder<S extends SSTable, B extends SSTableBuilder
         Preconditions.checkNotNull(ref);
         Preconditions.checkNotNull(ref.get());
         this.tableMetadataRef = ref;
+        return (B) this;
+    }
+
+    public B setChunkCache(ChunkCache chunkCache)
+    {
+        this.chunkCache = chunkCache;
         return (B) this;
     }
 
@@ -68,4 +76,8 @@ public abstract class SSTableBuilder<S extends SSTable, B extends SSTableBuilder
         return tableMetadataRef;
     }
 
+    public ChunkCache getChunkCache()
+    {
+        return chunkCache;
+    }
 }
