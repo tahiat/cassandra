@@ -92,7 +92,7 @@ class SASIIndexBuilder extends SecondaryIndexBuilder
                         final DecoratedKey key = sstable.decorateKey(keys.key());
                         final long keyPosition = keys.keyPositionForSecondaryIndex();
 
-                        indexWriter.startPartition(key, keyPosition);
+                        indexWriter.startPartition(key, keys.dataPosition(), keyPosition);
 
                         long position = sstable.getPosition(key, SSTableReader.Operator.EQ);
                         dataFile.seek(position);
@@ -102,7 +102,9 @@ class SASIIndexBuilder extends SecondaryIndexBuilder
                         {
                             // if the row has statics attached, it has to be indexed separately
                             if (cfs.metadata().hasStaticColumns())
+                            {
                                 indexWriter.nextUnfilteredCluster(partition.staticRow());
+                            }
 
                             while (partition.hasNext())
                                 indexWriter.nextUnfilteredCluster(partition.next());

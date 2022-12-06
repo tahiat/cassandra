@@ -151,14 +151,11 @@ public class BigTableWriter extends SSTableWriter
             return null;
 
         long startPosition = beforeAppend(key);
-        observers.forEach((o) -> o.startPartition(key, indexWriter.writer.position()));
-
-        //Reuse the writer for each row
-        partitionWriter.reset(DatabaseDescriptor.getColumnIndexCacheSize(), DatabaseDescriptor.getColumnIndexSize());
+        observers.forEach((o) -> o.startPartition(key, startPosition, indexWriter.writer.position()));
 
         try (UnfilteredRowIterator collecting = Transformation.apply(iterator, new StatsCollector(metadataCollector)))
         {
-            partitionWriter.buildRowIndex(collecting);
+            partitionWriter.writePartition(collecting);
 
             // afterAppend() writes the partition key before the first RowIndexEntry - so we have to add it's
             // serialized size to the index-writer position
@@ -166,8 +163,8 @@ public class BigTableWriter extends SSTableWriter
 
             RowIndexEntry entry = RowIndexEntry.create(startPosition, indexFilePosition,
                                                        collecting.partitionLevelDeletion(),
-                                                       partitionWriter.headerLength,
-                                                       partitionWriter.columnIndexCount,
+                                                       partitionWriter.getHeaderLength(),
+                                                       partitionWriter.getColumnIndexCount(),
                                                        partitionWriter.indexInfoSerializedSize(),
                                                        partitionWriter.indexSamples(),
                                                        partitionWriter.offsets(),

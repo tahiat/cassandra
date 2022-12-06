@@ -194,9 +194,9 @@ public class RowIndexEntryTest extends CQLTester
         {
 
             Iterator<Clustering<?>> clusteringIter = clusterings.iterator();
-            partitionWriter.buildRowIndex(makeRowIter(staticRow, partitionKey, clusteringIter, dataWriterNew));
+            partitionWriter.writePartition(makeRowIter(staticRow, partitionKey, clusteringIter, dataWriterNew));
             rieNew = RowIndexEntry.create(startPosition, 0L,
-                                          deletionInfo, partitionWriter.headerLength, partitionWriter.columnIndexCount,
+                                          deletionInfo, partitionWriter.getHeaderLength(), partitionWriter.getColumnIndexCount(),
                                           partitionWriter.indexInfoSerializedSize(),
                                           partitionWriter.indexSamples(), partitionWriter.offsets(),
                                           rieSerializer.indexInfoSerializer());

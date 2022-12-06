@@ -23,6 +23,8 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 import org.apache.cassandra.db.commitlog.CommitLog;
 import org.apache.cassandra.io.sstable.SequenceBasedSSTableId;
@@ -51,11 +53,12 @@ import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.Pair;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
 
+import org.apache.commons.lang3.tuple.ImmutableTriple;
+import org.apache.commons.lang3.tuple.Triple;
 import org.junit.Assert;
 
 import org.junit.BeforeClass;
@@ -147,10 +150,11 @@ public class SSTableFlushObserverTest
         Assert.assertTrue(observer.isComplete);
         Assert.assertEquals(expected.size(), observer.rows.size());
 
-        for (Pair<ByteBuffer, Long> e : observer.rows.keySet())
+        for (Triple<ByteBuffer, Long, Long> e : observer.rows.keySet())
         {
-            ByteBuffer key = e.left;
-            Long indexPosition = e.right;
+            ByteBuffer key = e.getLeft();
+            long dataPosition = e.getMiddle();
+            long indexPosition = e.getRight();
 
             if (sstableFormat == SSTableFormat.Type.BIG)
             {
@@ -195,18 +199,22 @@ public class SSTableFlushObserverTest
 
     private static class FlushObserver implements SSTableFlushObserver
     {
-        private final Multimap<Pair<ByteBuffer, Long>, Cell<?>> rows = ArrayListMultimap.create();
-        private Pair<ByteBuffer, Long> currentKey;
+        private final Multimap<Triple<ByteBuffer, Long, Long>, Cell<?>> rows = ArrayListMultimap.create();
+        private final Map<Triple<ByteBuffer, Long, Long>, DeletionTime> deletionTimes = new LinkedHashMap<>();
+        private final Multimap<Triple<ByteBuffer, Long, Long>, Cell<?>> staticRows = ArrayListMultimap.create();
+
+        private Triple<ByteBuffer, Long, Long> currentKey;
         private boolean isComplete;
 
         @Override
         public void begin()
-        {}
+        {
+        }
 
         @Override
-        public void startPartition(DecoratedKey key, long indexPosition)
+        public void startPartition(DecoratedKey key, long dataPosition, long indexPosition)
         {
-            currentKey = Pair.create(key.getKey(), indexPosition);
+            currentKey = ImmutableTriple.of(key.getKey(), dataPosition, indexPosition);
         }
 
         @Override
@@ -220,6 +228,18 @@ public class SSTableFlushObserverTest
         public void complete()
         {
             isComplete = true;
+        }
+
+        @Override
+        public void partitionLevelDeletion(DeletionTime partitionLevelDeletion)
+        {
+            deletionTimes.put(currentKey, partitionLevelDeletion);
+        }
+
+        @Override
+        public void staticRow(Row staticRow)
+        {
+            staticRow.forEach((c) -> staticRows.put(currentKey, (Cell<?>) c));
         }
     }
 
