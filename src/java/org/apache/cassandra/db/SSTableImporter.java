@@ -30,6 +30,7 @@ import java.util.UUID;
 import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.cassandra.io.sstable.IVerifier;
+import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.util.File;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -309,7 +310,7 @@ public class SSTableImporter
             {
                 logger.debug("Moving sstable {} back to {}", movedSSTable.newDescriptor.filenameFor(Component.DATA)
                                                           , movedSSTable.oldDescriptor.filenameFor(Component.DATA));
-                SSTableWriter.rename(movedSSTable.newDescriptor, movedSSTable.oldDescriptor, movedSSTable.components);
+                SSTable.rename(movedSSTable.newDescriptor, movedSSTable.oldDescriptor, movedSSTable.components);
             }
         }
     }

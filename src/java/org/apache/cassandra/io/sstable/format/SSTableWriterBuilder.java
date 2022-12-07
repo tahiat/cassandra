@@ -18,8 +18,11 @@
 
 package org.apache.cassandra.io.sstable.format;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import com.google.common.collect.ImmutableList;
@@ -27,7 +30,9 @@ import com.google.common.collect.ImmutableList;
 import org.apache.cassandra.config.Config.FlushCompression;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.SerializationHeader;
+import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
+import org.apache.cassandra.index.Index;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTable;
@@ -95,9 +100,10 @@ public abstract class SSTableWriterBuilder<W extends SSTableWriter, B extends SS
         return (B) this;
     }
 
-    public B setDefaultComponents()
+    public B addDefaultComponents()
     {
         Set<Component> components = new HashSet<>(descriptor.getFormat().writeComponents());
+        components.addAll(this.getComponents());
 
         if (FilterComponent.shouldUseBloomFilter(getTableMetadataRef().getLocal().params.bloomFilterFpChance))
         {
@@ -118,6 +124,28 @@ public abstract class SSTableWriterBuilder<W extends SSTableWriter, B extends SS
         setComponents(components);
 
         return (B) this;
+    }
+
+    public B addFlushObserversForSecondaryIndexes(Collection<Index> indexes, OperationType operationType)
+    {
+        if (indexes == null)
+            return (B) this;
+
+        Collection<SSTableFlushObserver> current = this.flushObservers != null ? this.flushObservers : Collections.emptyList();
+        List<SSTableFlushObserver> observers = new ArrayList<>(indexes.size() + current.size());
+        observers.addAll(current);
+
+        for (Index index : indexes)
+        {
+            SSTableFlushObserver observer = index.getFlushObserver(descriptor, operationType);
+            if (observer != null)
+            {
+                observer.begin();
+                observers.add(observer);
+            }
+        }
+
+        return setFlushObservers(observers);
     }
 
     public MetadataCollector getMetadataCollector()
@@ -168,7 +196,7 @@ public abstract class SSTableWriterBuilder<W extends SSTableWriter, B extends SS
     public W build(LifecycleNewTracker lifecycleNewTracker)
     {
         if (getComponents() == null)
-            setDefaultComponents();
+            addDefaultComponents();
 
         SSTable.validateRepairedMetadata(getRepairedAt(), getPendingRepair(), isTransientSSTable());
 

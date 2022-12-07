@@ -160,16 +160,12 @@ public class RealTransactionsTest extends SchemaLoader
                 File directory = txn.originals().iterator().next().descriptor.directory;
                 Descriptor desc = cfs.newSSTableDescriptor(directory);
                 TableMetadataRef metadata = Schema.instance.getTableMetadataRef(desc);
-                rewriter.switchWriter(SSTableWriter.create(metadata,
-                                                           desc,
-                                                           0,
-                                                           0,
-                                                           null,
-                                                           false,
-                                                           0,
-                                                           SerializationHeader.make(cfs.metadata(), txn.originals()),
-                                                           cfs.indexManager.listIndexes(),
-                                                           txn));
+                rewriter.switchWriter(desc.getFormat().getWriterFactory().builder(desc)
+                                          .setTableMetadataRef(metadata)
+                                          .setSerializationHeader(SerializationHeader.make(cfs.metadata(), txn.originals()))
+                                          .addFlushObserversForSecondaryIndexes(cfs.indexManager.listIndexes(), txn.opType())
+                                          .addDefaultComponents()
+                                          .build(txn));
                 while (ci.hasNext())
                 {
                     ci.setTargetDirectory(rewriter.currentWriter().getFilename());

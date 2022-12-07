@@ -27,6 +27,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Sets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -90,6 +91,48 @@ public abstract class SSTable
         this.compression = components.contains(Component.COMPRESSION_INFO);
         this.metadata = builder.getTableMetadataRef();
         this.chunkCache = builder.getChunkCache();
+    }
+
+    public static void rename(Descriptor tmpdesc, Descriptor newdesc, Set<Component> components)
+    {
+        for (Component component : Sets.difference(components, Sets.newHashSet(Component.DATA, Component.SUMMARY)))
+        {
+            FileUtils.renameWithConfirm(tmpdesc.filenameFor(component), newdesc.filenameFor(component));
+        }
+
+        // do -Data last because -Data present should mean the sstable was completely renamed before crash
+        FileUtils.renameWithConfirm(tmpdesc.filenameFor(Component.DATA), newdesc.filenameFor(Component.DATA));
+
+        // rename it without confirmation because summary can be available for loadNewSSTables but not for closeAndOpenReader
+        FileUtils.renameWithOutConfirm(tmpdesc.filenameFor(Component.SUMMARY), newdesc.filenameFor(Component.SUMMARY));
+    }
+
+    public static void copy(Descriptor tmpdesc, Descriptor newdesc, Set<Component> components)
+    {
+        for (Component component : Sets.difference(components, Sets.newHashSet(Component.DATA, Component.SUMMARY)))
+        {
+            FileUtils.copyWithConfirm(tmpdesc.filenameFor(component), newdesc.filenameFor(component));
+        }
+
+        // do -Data last because -Data present should mean the sstable was completely copied before crash
+        FileUtils.copyWithConfirm(tmpdesc.filenameFor(Component.DATA), newdesc.filenameFor(Component.DATA));
+
+        // copy it without confirmation because summary can be available for loadNewSSTables but not for closeAndOpenReader
+        FileUtils.copyWithOutConfirm(tmpdesc.filenameFor(Component.SUMMARY), newdesc.filenameFor(Component.SUMMARY));
+    }
+
+    public static void hardlink(Descriptor tmpdesc, Descriptor newdesc, Set<Component> components)
+    {
+        for (Component component : Sets.difference(components, Sets.newHashSet(Component.DATA, Component.SUMMARY)))
+        {
+            FileUtils.createHardLinkWithConfirm(tmpdesc.filenameFor(component), newdesc.filenameFor(component));
+        }
+
+        // do -Data last because -Data present should mean the sstable was completely copied before crash
+        FileUtils.createHardLinkWithConfirm(tmpdesc.filenameFor(Component.DATA), newdesc.filenameFor(Component.DATA));
+
+        // copy it without confirmation because summary can be available for loadNewSSTables but not for closeAndOpenReader
+        FileUtils.createHardLinkWithoutConfirm(tmpdesc.filenameFor(Component.SUMMARY), newdesc.filenameFor(Component.SUMMARY));
     }
 
     @VisibleForTesting

@@ -96,7 +96,13 @@ public class SerializationHeaderTest
 
                 SerializationHeader header = SerializationHeader.makeWithoutStats(schema);
                 try (LifecycleTransaction txn = LifecycleTransaction.offline(OperationType.WRITE);
-                     SSTableWriter sstableWriter = BigTableWriter.create(TableMetadataRef.forOfflineTools(schema), descriptor, 1, 0L, null, false, 0, header, Collections.emptyList(),  txn))
+                     SSTableWriter sstableWriter = descriptor.getFormat().getWriterFactory()
+                                                             .builder(descriptor)
+                                                             .setTableMetadataRef(TableMetadataRef.forOfflineTools(schema))
+                                                             .setKeyCount(1)
+                                                             .setSerializationHeader(header)
+                                                             .addDefaultComponents()
+                                                             .build(txn))
                 {
                     ColumnMetadata cd = schema.getColumn(v);
                     for (int i = 0 ; i < 5 ; ++i) {

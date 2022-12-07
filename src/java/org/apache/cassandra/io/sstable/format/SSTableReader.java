@@ -1715,18 +1715,18 @@ public abstract class SSTableReader extends SSTable implements UnfilteredSource,
             try
             {
                 logger.info("Hardlinking new SSTable {} to {}", oldDescriptor, newDescriptor);
-                SSTableWriter.hardlink(oldDescriptor, newDescriptor, components);
+                SSTable.hardlink(oldDescriptor, newDescriptor, components);
             }
             catch (FSWriteError ex)
             {
                 logger.warn("Unable to hardlink new SSTable {} to {}, falling back to copying", oldDescriptor, newDescriptor, ex);
-                SSTableWriter.copy(oldDescriptor, newDescriptor, components);
+                SSTable.copy(oldDescriptor, newDescriptor, components);
             }
         }
         else
         {
             logger.info("Moving new SSTable {} to {}", oldDescriptor, newDescriptor);
-            SSTableWriter.rename(oldDescriptor, newDescriptor, components);
+            SSTable.rename(oldDescriptor, newDescriptor, components);
         }
 
         SSTableReader reader;

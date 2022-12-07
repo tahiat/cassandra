@@ -25,6 +25,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.util.concurrent.Uninterruptibles;
+
+import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.util.File;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -43,6 +45,7 @@ import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.schema.KeyspaceParams;
+import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.utils.TimeUUID;
 
 import static org.junit.Assert.assertEquals;
@@ -155,7 +158,17 @@ public class SSTableWriterTestBase extends SchemaLoader
     public static SSTableWriter getWriter(ColumnFamilyStore cfs, File directory, LifecycleTransaction txn, long repairedAt, TimeUUID pendingRepair, boolean isTransient)
     {
         Descriptor desc = cfs.newSSTableDescriptor(directory);
-        return SSTableWriter.create(desc, 0, repairedAt, pendingRepair, isTransient, new SerializationHeader(true, cfs.metadata(), cfs.metadata().regularAndStaticColumns(), EncodingStats.NO_STATS), cfs.indexManager.listIndexes(), txn);
+        return desc.getFormat().getWriterFactory().builder(desc)
+                   .setKeyCount(0)
+                   .setRepairedAt(repairedAt)
+                   .setPendingRepair(pendingRepair)
+                   .setTransientSSTable(isTransient)
+                   .setSerializationHeader(new SerializationHeader(true, cfs.metadata(), cfs.metadata().regularAndStaticColumns(), EncodingStats.NO_STATS))
+                   .addDefaultComponents()
+                   .addFlushObserversForSecondaryIndexes(cfs.indexManager.listIndexes(), txn.opType())
+                   .setMetadataCollector(new MetadataCollector(cfs.metadata().comparator))
+                   .setTableMetadataRef(cfs.metadata)
+                   .build(txn);
     }
 
     public static SSTableWriter getWriter(ColumnFamilyStore cfs, File directory, LifecycleTransaction txn)

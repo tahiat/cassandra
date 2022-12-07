@@ -51,7 +51,9 @@ public class SimpleSSTableMultiWriter implements SSTableMultiWriter
 
     public Collection<SSTableReader> finish(long repairedAt, long maxDataAge, boolean openResult)
     {
-        return Collections.singleton(writer.finish(repairedAt, maxDataAge, openResult));
+        writer.setRepairedAt(repairedAt);
+        writer.setMaxDataAge(maxDataAge);
+        return Collections.singleton(writer.finish(openResult));
     }
 
     public Collection<SSTableReader> finish(boolean openResult)
@@ -118,7 +120,18 @@ public class SimpleSSTableMultiWriter implements SSTableMultiWriter
                                             Collection<Index> indexes,
                                             LifecycleNewTracker lifecycleNewTracker)
     {
-        SSTableWriter writer = SSTableWriter.create(descriptor, keyCount, repairedAt, pendingRepair, isTransient, metadata, metadataCollector, header, indexes, lifecycleNewTracker);
+        SSTableWriter writer = descriptor.getFormat().getWriterFactory().builder(descriptor)
+                                         .setKeyCount(keyCount)
+                                         .setRepairedAt(repairedAt)
+                                         .setPendingRepair(pendingRepair)
+                                         .setTransientSSTable(isTransient)
+                                         .setTableMetadataRef(metadata)
+                                         .setMetadataCollector(metadataCollector)
+                                         .setSerializationHeader(header)
+                                         .addDefaultComponents()
+                                         .addFlushObserversForSecondaryIndexes(indexes, lifecycleNewTracker.opType())
+                                         .build(lifecycleNewTracker);
+
         return new SimpleSSTableMultiWriter(writer, lifecycleNewTracker);
     }
 }
