@@ -26,19 +26,25 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 
 import org.apache.cassandra.cache.ChunkCache;
+import org.apache.cassandra.io.sstable.format.big.IOOptions;
 import org.apache.cassandra.schema.TableMetadataRef;
 
-public abstract class SSTableBuilder<S extends SSTable, B extends SSTableBuilder<S, B>>
-{
-    public SSTableBuilder(Descriptor descriptor)
-    {
-        this.descriptor = descriptor;
-    }
+import static com.google.common.base.Preconditions.checkNotNull;
 
+public class SSTableBuilder<S extends SSTable, B extends SSTableBuilder<S, B>>
+{
     public final Descriptor descriptor;
+
     private Set<Component> components;
     private TableMetadataRef tableMetadataRef;
     private ChunkCache chunkCache = ChunkCache.instance;
+    private IOOptions ioOptions = IOOptions.getDefault();
+
+    public SSTableBuilder(Descriptor descriptor)
+    {
+        checkNotNull(descriptor);
+        this.descriptor = descriptor;
+    }
 
     public B setComponents(Collection<Component> components)
     {
@@ -61,6 +67,12 @@ public abstract class SSTableBuilder<S extends SSTable, B extends SSTableBuilder
         return (B) this;
     }
 
+    public B setIOOptions(IOOptions ioOptions)
+    {
+        this.ioOptions = ioOptions;
+        return (B) this;
+    }
+
     public Descriptor getDescriptor()
     {
         return descriptor;
@@ -79,5 +91,10 @@ public abstract class SSTableBuilder<S extends SSTable, B extends SSTableBuilder
     public ChunkCache getChunkCache()
     {
         return chunkCache;
+    }
+
+    public IOOptions getIOOptions()
+    {
+        return ioOptions;
     }
 }

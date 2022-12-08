@@ -25,10 +25,13 @@ import com.google.common.collect.ImmutableSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.cache.ChunkCache;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.KeyReader;
+import org.apache.cassandra.io.sstable.SSTableBuilder;
+import org.apache.cassandra.io.sstable.format.big.IOOptions;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.utils.Clock;
@@ -46,14 +49,16 @@ public abstract class SSTableReaderLoadingBuilder<R extends SSTableReader, B ext
     protected final Descriptor descriptor;
     protected final Set<Component> components;
     protected final TableMetadataRef tableMetadataRef;
+    protected final IOOptions ioOptions;
+    protected final ChunkCache chunkCache;
 
-    public SSTableReaderLoadingBuilder(Descriptor descriptor, Set<Component> components, TableMetadataRef tableMetadataRef)
+    public SSTableReaderLoadingBuilder(SSTableBuilder<?, ?> builder)
     {
-        checkNotNull(descriptor);
-
-        this.descriptor = descriptor;
-        this.components = components != null ? ImmutableSet.copyOf(components) : TOCComponent.loadOrCreate(descriptor);
-        this.tableMetadataRef = tableMetadataRef != null ? tableMetadataRef : resolveTableMetadataRef();
+        this.descriptor = builder.descriptor;
+        this.components = builder.getComponents() != null ? ImmutableSet.copyOf(builder.getComponents()) : TOCComponent.loadOrCreate(this.descriptor);
+        this.tableMetadataRef = builder.getTableMetadataRef() != null ? builder.getTableMetadataRef() : resolveTableMetadataRef();
+        this.ioOptions = builder.getIOOptions() != null ? builder.getIOOptions() : IOOptions.getDefault();
+        this.chunkCache = builder.getChunkCache() != null ? builder.getChunkCache() : ChunkCache.instance;
 
         checkNotNull(this.components);
         checkNotNull(this.tableMetadataRef);
@@ -130,5 +135,4 @@ public abstract class SSTableReaderLoadingBuilder<R extends SSTableReader, B ext
 
         return metadata;
     }
-
 }

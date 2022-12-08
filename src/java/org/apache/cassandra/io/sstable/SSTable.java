@@ -38,6 +38,7 @@ import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.format.TOCComponent;
+import org.apache.cassandra.io.sstable.format.big.IOOptions;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.TableMetadata;
@@ -80,6 +81,7 @@ public abstract class SSTable
     protected final TableMetadataRef metadata;
 
     protected final ChunkCache chunkCache;
+    protected final IOOptions ioOptions;
 
     public SSTable(SSTableBuilder<?, ?> builder)
     {
@@ -87,6 +89,7 @@ public abstract class SSTable
         Preconditions.checkNotNull(builder.getComponents());
 
         this.descriptor = builder.descriptor;
+        this.ioOptions = builder.getIOOptions();
         this.components = new CopyOnWriteArraySet<>(builder.getComponents());
         this.compression = components.contains(Component.COMPRESSION_INFO);
         this.metadata = builder.getTableMetadataRef();

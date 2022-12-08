@@ -20,21 +20,19 @@ package org.apache.cassandra.io.sstable.format.big;
 
 import java.io.IOException;
 import java.util.OptionalInt;
-import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.cache.ChunkCache;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
-import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.Downsampling;
 import org.apache.cassandra.io.sstable.IndexSummary;
 import org.apache.cassandra.io.sstable.IndexSummaryBuilder;
 import org.apache.cassandra.io.sstable.KeyReader;
+import org.apache.cassandra.io.sstable.SSTableBuilder;
 import org.apache.cassandra.io.sstable.format.CompressionInfoComponent;
 import org.apache.cassandra.io.sstable.format.FilterComponent;
 import org.apache.cassandra.io.sstable.format.SSTableReaderLoadingBuilder;
@@ -46,7 +44,6 @@ import org.apache.cassandra.io.util.DiskOptimizationStrategy;
 import org.apache.cassandra.io.util.FileHandle;
 import org.apache.cassandra.io.util.RandomAccessReader;
 import org.apache.cassandra.schema.TableMetadata;
-import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.utils.AlwaysPresentFilter;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
@@ -61,22 +58,12 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
 {
     private final static Logger logger = LoggerFactory.getLogger(BigSSTableReaderLoadingBuilder.class);
 
-    private final BigTableOptions options;
-
-    private final ChunkCache chunkCache;
-
     private FileHandle.Builder dataFileBuilder;
     private FileHandle.Builder indexFileBuilder;
 
-    public BigSSTableReaderLoadingBuilder(Descriptor descriptor,
-                                          Set<Component> components,
-                                          TableMetadataRef tableMetadataRef,
-                                          BigTableOptions options,
-                                          ChunkCache chunkCache)
+    public BigSSTableReaderLoadingBuilder(SSTableBuilder<?, ?> descriptor)
     {
-        super(descriptor, components, tableMetadataRef);
-        this.options = options;
-        this.chunkCache = chunkCache;
+        super(descriptor);
     }
 
     @Override
@@ -317,15 +304,15 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
 
         logger.info("Opening {} ({})", descriptor, FBUtilities.prettyPrintMemory(descriptor.fileFor(Component.DATA).length()));
 
-        long recordSize = statsMetadata.estimatedPartitionSize.percentile(options.diskOptimizationEstimatePercentile);
-        int bufferSize = options.diskOptimizationStrategy.bufferSize(recordSize);
+        long recordSize = statsMetadata.estimatedPartitionSize.percentile(ioOptions.diskOptimizationEstimatePercentile);
+        int bufferSize = ioOptions.diskOptimizationStrategy.bufferSize(recordSize);
 
         if (dataFileBuilder == null)
             dataFileBuilder = new FileHandle.Builder(descriptor.fileFor(Component.DATA));
 
         dataFileBuilder.bufferSize(bufferSize);
         dataFileBuilder.withChunkCache(chunkCache);
-        dataFileBuilder.mmapped(options.defaultDiskAccessMode);
+        dataFileBuilder.mmapped(ioOptions.defaultDiskAccessMode);
         if (components.contains(Component.COMPRESSION_INFO))
             dataFileBuilder.withCompressionMetadata(CompressionInfoComponent.load(descriptor));
 
@@ -337,7 +324,7 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
         assert this.indexFileBuilder == null || this.indexFileBuilder.file.equals(descriptor.fileFor(Component.PRIMARY_INDEX));
 
         long indexFileLength = descriptor.fileFor(Component.PRIMARY_INDEX).length();
-        OptionalInt indexBufferSize = indexSummary != null ? OptionalInt.of(options.diskOptimizationStrategy.bufferSize(indexFileLength / indexSummary.size()))
+        OptionalInt indexBufferSize = indexSummary != null ? OptionalInt.of(ioOptions.diskOptimizationStrategy.bufferSize(indexFileLength / indexSummary.size()))
                                                            : OptionalInt.empty();
 
         if (indexFileBuilder == null)
@@ -345,7 +332,7 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
 
         indexBufferSize.ifPresent(indexFileBuilder::bufferSize);
         indexFileBuilder.withChunkCache(chunkCache);
-        indexFileBuilder.mmapped(options.indexDiskAccessMode);
+        indexFileBuilder.mmapped(ioOptions.indexDiskAccessMode);
 
         return indexFileBuilder;
     }

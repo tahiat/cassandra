@@ -22,20 +22,15 @@ import java.util.Set;
 
 import com.google.common.base.CharMatcher;
 
-import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.GaugeProvider;
 import org.apache.cassandra.io.sstable.format.big.BigFormat;
-import org.apache.cassandra.utils.OutputHandler;
 
 /**
  * Provides the accessors to data on disk.
  */
 public interface SSTableFormat<R extends SSTableReader, W extends SSTableWriter>
 {
-    boolean enableSSTableDevelopmentTestMode = Boolean.getBoolean("cassandra.test.sstableformatdevelopment");
-
     Type getType();
 
     Version getLatestVersion();
@@ -56,13 +51,6 @@ public interface SSTableFormat<R extends SSTableReader, W extends SSTableWriter>
 
     Set<Component> writeComponents();
 
-    IScrubber getScrubber(ColumnFamilyStore cfs,
-                          LifecycleTransaction transaction,
-                          boolean skipCorrupted,
-                          OutputHandler outputHandler,
-                          boolean checkData,
-                          boolean reinsertOverflowedTTLRows);
-
     AbstractRowIndexEntry.KeyCacheValueSerializer<?, ?> getKeyCacheValueSerializer();
 
     R cast(SSTableReader sstr);
@@ -76,7 +64,7 @@ public interface SSTableFormat<R extends SSTableReader, W extends SSTableWriter>
         //The original sstable format
         BIG("big", BigFormat.instance);
 
-        public final SSTableFormat info;
+        public final SSTableFormat<?, ?> info;
         public final String name;
 
         public static Type current()
@@ -84,7 +72,7 @@ public interface SSTableFormat<R extends SSTableReader, W extends SSTableWriter>
             return BIG;
         }
 
-        Type(String name, SSTableFormat info)
+        Type(String name, SSTableFormat<?, ?> info)
         {
             //Since format comes right after generation
             //we disallow formats with numeric names

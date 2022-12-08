@@ -23,8 +23,13 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.io.util.DiskOptimizationStrategy;
 import org.apache.cassandra.io.util.SequentialWriterOption;
 
-public class BigTableOptions
+public class IOOptions
 {
+    public static IOOptions getDefault()
+    {
+        return new IOOptions();
+    }
+
     public final DiskOptimizationStrategy diskOptimizationStrategy = DatabaseDescriptor.getDiskOptimizationStrategy();
     public final Config.DiskAccessMode defaultDiskAccessMode = DatabaseDescriptor.getDiskAccessMode();
     public final Config.DiskAccessMode indexDiskAccessMode = DatabaseDescriptor.getIndexAccessMode();

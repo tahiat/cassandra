@@ -25,6 +25,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 
 import org.apache.cassandra.config.Config.FlushCompression;
@@ -195,8 +196,7 @@ public abstract class SSTableWriterBuilder<W extends SSTableWriter, B extends SS
 
     public W build(LifecycleNewTracker lifecycleNewTracker)
     {
-        if (getComponents() == null)
-            addDefaultComponents();
+        Preconditions.checkNotNull(getComponents());
 
         SSTable.validateRepairedMetadata(getRepairedAt(), getPendingRepair(), isTransientSSTable());
 

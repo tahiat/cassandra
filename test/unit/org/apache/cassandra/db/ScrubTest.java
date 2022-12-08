@@ -728,13 +728,13 @@ public class ScrubTest
             super(builder, lifecycleNewTracker);
         }
 
-        @Override
-        protected boolean startPartition(DecoratedKey key, DeletionTime partitionLevelDeletion)
-        {
-            // return getDataWriterPosition();
-            // TODO
-            return super.startPartition(key, partitionLevelDeletion);
-        }
+//        @Override
+//        protected boolean startPartition(DecoratedKey key, DeletionTime partitionLevelDeletion)
+//        {
+//            // return getDataWriterPosition();
+//            // TODO
+//            return super.startPartition(key, partitionLevelDeletion);
+//        }
     }
 
     /**

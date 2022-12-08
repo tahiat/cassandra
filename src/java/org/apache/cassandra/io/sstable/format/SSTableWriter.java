@@ -18,9 +18,13 @@
 
 package org.apache.cassandra.io.sstable.format;
 
+import java.io.IOException;
 import java.util.Collection;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
+
+import com.google.common.collect.ImmutableList;
 
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DeletionPurger;
@@ -32,12 +36,16 @@ import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.db.rows.Unfiltered;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.io.FSWriteError;
+import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.sstable.metadata.MetadataComponent;
 import org.apache.cassandra.io.sstable.metadata.MetadataType;
 import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
+import org.apache.cassandra.io.util.File;
+import org.apache.cassandra.io.util.SequentialWriter;
+import org.apache.cassandra.io.util.SequentialWriterOption;
 import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.schema.SchemaConstants;
 import org.apache.cassandra.schema.TableMetadata;
@@ -64,14 +72,6 @@ public abstract class SSTableWriter extends SSTable implements Transactional
     protected final Collection<SSTableFlushObserver> observers;
 
     protected abstract TransactionalProxy txnProxy();
-
-    // due to lack of multiple inheritance, we use an inner class to proxy our Transactional implementation details
-    protected abstract class TransactionalProxy extends AbstractTransactional
-    {
-        // should be set during doPrepare()
-        protected SSTableReader finalReader;
-        protected boolean openResult;
-    }
 
     protected SSTableWriter(SSTableWriterBuilder<?, ?> builder, LifecycleNewTracker lifecycleNewTracker)
     {
@@ -141,9 +141,11 @@ public abstract class SSTableWriter extends SSTable implements Transactional
      */
     public abstract SSTableReader openFinalEarly();
 
+    protected abstract SSTableReader openFinal(SSTableReader.OpenReason openReason);
+
     public SSTableReader finish(boolean openResult)
     {
-        setOpenResult(openResult);
+        this.setOpenResult(openResult);
         txnProxy.finish();
         observers.forEach(SSTableFlushObserver::complete);
         return finished();
@@ -211,6 +213,20 @@ public abstract class SSTableWriter extends SSTable implements Transactional
         metadataCollector.release();
     }
 
+    private void writeMetadata(Descriptor desc, Map<MetadataType, MetadataComponent> components)
+    {
+        File file = new File(desc.filenameFor(Component.STATS));
+        try (SequentialWriter out = new SequentialWriter(file, SequentialWriterOption.DEFAULT))
+        {
+            desc.getMetadataSerializer().serialize(components, out, desc.version);
+            out.finish();
+        }
+        catch (IOException e)
+        {
+            throw new FSWriteError(e, file.path());
+        }
+    }
+
     /**
      * Parameters for calculating the expected size of an sstable. Exposed on memtable flush sets (i.e. collected
      * subsets of a memtable that will be written to sstables).
@@ -227,6 +243,49 @@ public abstract class SSTableWriter extends SSTable implements Transactional
         long estimateSize(SSTableSizeParameters parameters);
 
         B builder(Descriptor descriptor);
+    }
+
+    // due to lack of multiple inheritance, we use an inner class to proxy our Transactional implementation details
+    protected class TransactionalProxy extends AbstractTransactional
+    {
+        // should be set during doPrepare()
+        protected SSTableReader finalReader;
+        protected boolean openResult;
+        private final Supplier<ImmutableList<Transactional>> transactionals;
+
+        public TransactionalProxy(Supplier<ImmutableList<Transactional>> transactionals)
+        {
+            this.transactionals = transactionals;
+        }
+
+        // finalise our state on disk, including renaming
+        protected void doPrepare()
+        {
+            transactionals.get().forEach(Transactional::prepareToCommit);
+            writeMetadata(descriptor, finalizeMetadata());
+
+            // save the table of components
+            TOCComponent.appendTOC(descriptor, components);
+
+            if (openResult)
+                finalReader = openFinal(SSTableReader.OpenReason.NORMAL);
+        }
+
+        protected Throwable doCommit(Throwable accumulate)
+        {
+            for (Transactional t : transactionals.get().reverse())
+                accumulate = t.commit(accumulate);
+
+            return accumulate;
+        }
+
+        protected Throwable doAbort(Throwable accumulate)
+        {
+            for (Transactional t : transactionals.get())
+                accumulate = t.abort(accumulate);
+
+            return accumulate;
+        }
     }
 
     public static void guardCollectionSize(TableMetadata metadata, DecoratedKey partitionKey, Unfiltered unfiltered)
