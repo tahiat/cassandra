@@ -22,7 +22,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.List;
 
 import com.google.common.primitives.Ints;
@@ -33,7 +32,6 @@ import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.db.rows.Unfiltered;
 import org.apache.cassandra.io.ISerializer;
 import org.apache.cassandra.io.sstable.IndexInfo;
-import org.apache.cassandra.io.sstable.format.SSTableFlushObserver;
 import org.apache.cassandra.io.sstable.format.SortedTablePartitionWriter;
 import org.apache.cassandra.io.sstable.format.Version;
 import org.apache.cassandra.io.util.DataOutputBuffer;
@@ -66,21 +64,19 @@ public class BigFormatPartitionWriter extends SortedTablePartitionWriter
     BigFormatPartitionWriter(SerializationHeader header,
                              SequentialWriter writer,
                              Version version,
-                             Collection<SSTableFlushObserver> observers,
                              ISerializer<IndexInfo> indexInfoSerializer)
     {
-        this(header, writer, version, observers, indexInfoSerializer, DatabaseDescriptor.getColumnIndexCacheSize(), DatabaseDescriptor.getColumnIndexSize());
+        this(header, writer, version, indexInfoSerializer, DatabaseDescriptor.getColumnIndexCacheSize(), DatabaseDescriptor.getColumnIndexSize());
     }
 
     BigFormatPartitionWriter(SerializationHeader header,
                              SequentialWriter writer,
                              Version version,
-                             Collection<SSTableFlushObserver> observers,
                              ISerializer<IndexInfo> indexInfoSerializer,
                              int cacheSizeThreshold,
                              int indexSize)
     {
-        super(header, writer, version, observers);
+        super(header, writer, version);
         this.idxSerializer = indexInfoSerializer;
         this.cacheSizeThreshold = cacheSizeThreshold;
         this.indexSize = indexSize;

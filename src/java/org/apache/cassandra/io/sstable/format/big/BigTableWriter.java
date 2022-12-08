@@ -29,27 +29,51 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.DeletionTime;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
-import org.apache.cassandra.db.rows.*;
-import org.apache.cassandra.db.transform.Transformation;
+import org.apache.cassandra.db.rows.PartitionSerializationException;
+import org.apache.cassandra.db.rows.RangeTombstoneBoundMarker;
+import org.apache.cassandra.db.rows.RangeTombstoneBoundaryMarker;
+import org.apache.cassandra.db.rows.RangeTombstoneMarker;
+import org.apache.cassandra.db.rows.Row;
+import org.apache.cassandra.db.rows.Rows;
+import org.apache.cassandra.db.rows.Unfiltered;
+import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.compress.CompressedSequentialWriter;
-import org.apache.cassandra.io.sstable.*;
+import org.apache.cassandra.io.sstable.Component;
+import org.apache.cassandra.io.sstable.DataComponent;
+import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.Downsampling;
+import org.apache.cassandra.io.sstable.IndexSummary;
+import org.apache.cassandra.io.sstable.IndexSummaryBuilder;
+import org.apache.cassandra.io.sstable.format.AbstractRowIndexEntry;
 import org.apache.cassandra.io.sstable.format.FilterComponent;
+import org.apache.cassandra.io.sstable.format.SSTableFlushObserver;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
+import org.apache.cassandra.io.sstable.format.SortedTableWriter;
 import org.apache.cassandra.io.sstable.format.TOCComponent;
-import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.sstable.metadata.MetadataComponent;
 import org.apache.cassandra.io.sstable.metadata.MetadataType;
-import org.apache.cassandra.io.util.*;
-import org.apache.cassandra.utils.*;
+import org.apache.cassandra.io.util.DataPosition;
+import org.apache.cassandra.io.util.File;
+import org.apache.cassandra.io.util.FileHandle;
+import org.apache.cassandra.io.util.FileUtils;
+import org.apache.cassandra.io.util.SequentialWriter;
+import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.EstimatedHistogram;
+import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.FilterFactory;
+import org.apache.cassandra.utils.IFilter;
+import org.apache.cassandra.utils.JVMStabilityInspector;
+import org.apache.cassandra.utils.Throwables;
 import org.apache.cassandra.utils.concurrent.Transactional;
 
 import static org.apache.cassandra.utils.Clock.Global.currentTimeMillis;
 
-public class BigTableWriter extends SSTableWriter
+public class BigTableWriter extends SortedTableWriter<BigFormatPartitionWriter>
 {
     private static final Logger logger = LoggerFactory.getLogger(BigTableWriter.class);
 
@@ -82,7 +106,6 @@ public class BigTableWriter extends SSTableWriter
         partitionWriter = new BigFormatPartitionWriter(builder.getSerializationHeader(),
                                                        dataWriter,
                                                        builder.getDescriptor().version,
-                                                       builder.getFlushObservers(),
                                                        rowIndexEntrySerializer.indexInfoSerializer());
     }
 
@@ -104,29 +127,6 @@ public class BigTableWriter extends SSTableWriter
         return dataWriter.position();
     }
 
-    /**
-     * Perform sanity checks on @param decoratedKey and @return the position in the data file before any data is written
-     */
-    protected long beforeAppend(DecoratedKey decoratedKey)
-    {
-        assert decoratedKey != null : "Keys must not be null"; // empty keys ARE allowed b/c of indexed column values
-        if (lastWrittenKey != null && lastWrittenKey.compareTo(decoratedKey) >= 0)
-            throw new RuntimeException("Last written key " + lastWrittenKey + " >= current key " + decoratedKey + " writing into " + getFilename());
-        return (lastWrittenKey == null) ? 0 : dataWriter.position();
-    }
-
-    private void afterAppend(DecoratedKey decoratedKey, long dataEnd, RowIndexEntry index, ByteBuffer indexInfo) throws IOException
-    {
-        metadataCollector.addKey(decoratedKey.getKey());
-        lastWrittenKey = decoratedKey;
-        last = lastWrittenKey;
-        if (first == null)
-            first = lastWrittenKey;
-
-        if (logger.isTraceEnabled())
-            logger.trace("wrote {} at {}", decoratedKey, dataEnd);
-        indexWriter.append(decoratedKey, index, dataEnd, indexInfo);
-    }
 
     /**
      * Appends partition data to this writer.
@@ -134,58 +134,149 @@ public class BigTableWriter extends SSTableWriter
      * @param iterator the partition to write
      * @return the created index entry if something was written, that is if {@code iterator}
      * wasn't empty, {@code null} otherwise.
-     *
      * @throws FSWriteError if a write to the dataFile fails
      */
-    public RowIndexEntry append(UnfilteredRowIterator iterator)
+    public AbstractRowIndexEntry append(UnfilteredRowIterator partition)
     {
-        DecoratedKey key = iterator.partitionKey();
+        if (partition.isEmpty())
+            return null;
+
+        try
+        {
+            if (!startPartition(partition.partitionKey(), partition.partitionLevelDeletion()))
+                return null;
+
+            if (header.hasStatic())
+                addStaticRow(partition.staticRow());
+
+            while (partition.hasNext())
+                addUnfiltered(partition.next());
+
+            return endPartition(partition.partitionKey(), partition.partitionLevelDeletion());
+        }
+        catch (BufferOverflowException boe)
+        {
+            throw new PartitionSerializationException(partition, boe);
+        }
+        catch (IOException e)
+        {
+            throw new FSWriteError(e, getFilename());
+        }
+    }
+
+    protected void notifyObservers(Consumer<SSTableFlushObserver> action)
+    {
+        if (observers != null && !observers.isEmpty())
+            observers.forEach(action);
+    }
+
+    protected boolean startPartition(DecoratedKey key, DeletionTime partitionLevelDeletion)
+    {
+        assert key != null : "Keys must not be null"; // empty keys ARE allowed b/c of indexed column values
 
         if (key.getKey().remaining() > FBUtilities.MAX_UNSIGNED_SHORT)
         {
             logger.error("Key size {} exceeds maximum of {}, skipping row", key.getKey().remaining(), FBUtilities.MAX_UNSIGNED_SHORT);
-            return null;
+            return false;
         }
 
-        if (iterator.isEmpty())
-            return null;
+        if (lastWrittenKey != null && lastWrittenKey.compareTo(key) >= 0)
+            throw new RuntimeException(String.format("Last written key %s >= current key %s, writing into %s", lastWrittenKey, key, getFilename()));
 
-        long startPosition = beforeAppend(key);
-        observers.forEach((o) -> o.startPartition(key, startPosition, indexWriter.writer.position()));
+        notifyObservers(o -> o.startPartition(key, partitionWriter.getInitialPosition(), indexWriter.writer.position()));
 
-        try (UnfilteredRowIterator collecting = Transformation.apply(iterator, new StatsCollector(metadataCollector)))
+        metadataCollector.update(partitionLevelDeletion);
+
+        return true;
+    }
+
+    protected void addStaticRow(Row row) throws IOException
+    {
+        partitionWriter.addStaticRow(row);
+        notifyObservers(o -> o.staticRow(row));
+
+        if (!row.isEmpty())
+            Rows.collectStats(row, metadataCollector);
+    }
+
+    protected final void addUnfiltered(Unfiltered unfiltered) throws IOException
+    {
+        if (unfiltered.isRow())
         {
-            partitionWriter.writePartition(collecting);
-
-            // afterAppend() writes the partition key before the first RowIndexEntry - so we have to add it's
-            // serialized size to the index-writer position
-            long indexFilePosition = ByteBufferUtil.serializedSizeWithShortLength(key.getKey()) + indexWriter.writer.position();
-
-            RowIndexEntry entry = RowIndexEntry.create(startPosition, indexFilePosition,
-                                                       collecting.partitionLevelDeletion(),
-                                                       partitionWriter.getHeaderLength(),
-                                                       partitionWriter.getColumnIndexCount(),
-                                                       partitionWriter.indexInfoSerializedSize(),
-                                                       partitionWriter.indexSamples(),
-                                                       partitionWriter.offsets(),
-                                                       rowIndexEntrySerializer.indexInfoSerializer());
-
-            long endPosition = dataWriter.position();
-            long rowSize = endPosition - startPosition;
-            maybeLogLargePartitionWarning(key, rowSize);
-            maybeLogManyTombstonesWarning(key, metadataCollector.totalTombstones);
-            metadataCollector.addPartitionSizeInBytes(rowSize);
-            afterAppend(key, endPosition, entry, partitionWriter.buffer());
-            return entry;
+            addRow((Row) unfiltered);
         }
-        catch (BufferOverflowException boe)
+        else
         {
-            throw new PartitionSerializationException(iterator, boe);
+            assert unfiltered.isRangeTombstoneMarker();
+            addRangeTomstoneMarker((RangeTombstoneMarker) unfiltered);
         }
-        catch (IOException e)
+    }
+
+    protected void addRow(Row row) throws IOException
+    {
+        partitionWriter.addUnfiltered(row);
+        notifyObservers(o -> o.nextUnfilteredCluster(row));
+
+        metadataCollector.updateClusteringValues(row.clustering());
+        Rows.collectStats(row, metadataCollector);
+    }
+
+    protected void addRangeTomstoneMarker(RangeTombstoneMarker marker) throws IOException
+    {
+        partitionWriter.addUnfiltered(marker);
+        notifyObservers(o -> o.nextUnfilteredCluster(marker));
+
+        metadataCollector.updateClusteringValues(marker.clustering());
+        if (marker.isBoundary())
         {
-            throw new FSWriteError(e, dataWriter.getPath());
+            RangeTombstoneBoundaryMarker bm = (RangeTombstoneBoundaryMarker) marker;
+            metadataCollector.update(bm.endDeletionTime());
+            metadataCollector.update(bm.startDeletionTime());
         }
+        else
+        {
+            metadataCollector.update(((RangeTombstoneBoundMarker) marker).deletionTime());
+        }
+    }
+
+    protected AbstractRowIndexEntry endPartition(DecoratedKey key, DeletionTime partitionLevelDeletion) throws IOException
+    {
+        partitionWriter.finish();
+
+        // afterAppend() writes the partition key before the first RowIndexEntry - so we have to add it's
+        // serialized size to the index-writer position
+        long indexFilePosition = ByteBufferUtil.serializedSizeWithShortLength(key.getKey()) + indexWriter.writer.position();
+
+        RowIndexEntry entry = RowIndexEntry.create(partitionWriter.getInitialPosition(),
+                                                   indexFilePosition,
+                                                   partitionLevelDeletion,
+                                                   partitionWriter.getHeaderLength(),
+                                                   partitionWriter.getColumnIndexCount(),
+                                                   partitionWriter.indexInfoSerializedSize(),
+                                                   partitionWriter.indexSamples(),
+                                                   partitionWriter.offsets(),
+                                                   rowIndexEntrySerializer.indexInfoSerializer());
+
+        long endPosition = dataWriter.position();
+        long rowSize = endPosition - partitionWriter.getInitialPosition();
+        maybeLogLargePartitionWarning(key, rowSize);
+        maybeLogManyTombstonesWarning(key, metadataCollector.totalTombstones);
+        metadataCollector.addPartitionSizeInBytes(rowSize);
+
+        metadataCollector.addKey(key.getKey());
+        lastWrittenKey = key;
+        last = lastWrittenKey;
+        if (first == null)
+            first = lastWrittenKey;
+
+        if (logger.isTraceEnabled())
+            logger.trace("wrote {} at {}", key, endPosition);
+
+        indexWriter.append(key, entry, endPosition, partitionWriter.buffer());
+
+        metadataCollector.addCellPerPartitionCount();
+
+        return entry;
     }
 
     private void maybeLogLargePartitionWarning(DecoratedKey key, long rowSize)
@@ -203,63 +294,6 @@ public class BigTableWriter extends SSTableWriter
         {
             String keyString = metadata().partitionKeyType.getString(key.getKey());
             logger.warn("Writing {} tombstones to {}/{}:{} in sstable {}", tombstoneCount, metadata.keyspace, metadata.name, keyString, getFilename());
-        }
-    }
-
-    private static class StatsCollector extends Transformation
-    {
-        private final MetadataCollector collector;
-        private int cellCount;
-
-        StatsCollector(MetadataCollector collector)
-        {
-            this.collector = collector;
-        }
-
-        @Override
-        public Row applyToStatic(Row row)
-        {
-            if (!row.isEmpty())
-                cellCount += Rows.collectStats(row, collector);
-            return row;
-        }
-
-        @Override
-        public Row applyToRow(Row row)
-        {
-            collector.updateClusteringValues(row.clustering());
-            cellCount += Rows.collectStats(row, collector);
-            return row;
-        }
-
-        @Override
-        public RangeTombstoneMarker applyToMarker(RangeTombstoneMarker marker)
-        {
-            collector.updateClusteringValues(marker.clustering());
-            if (marker.isBoundary())
-            {
-                RangeTombstoneBoundaryMarker bm = (RangeTombstoneBoundaryMarker)marker;
-                collector.update(bm.endDeletionTime());
-                collector.update(bm.startDeletionTime());
-            }
-            else
-            {
-                collector.update(((RangeTombstoneBoundMarker)marker).deletionTime());
-            }
-            return marker;
-        }
-
-        @Override
-        public void onPartitionClose()
-        {
-            collector.addCellPerPartitionCount(cellCount);
-        }
-
-        @Override
-        public DeletionTime applyToDeletion(DeletionTime deletionTime)
-        {
-            collector.update(deletionTime);
-            return deletionTime;
         }
     }
 
@@ -548,5 +582,4 @@ public class BigTableWriter extends SSTableWriter
             return accumulate;
         }
     }
-
 }

@@ -18,7 +18,6 @@
 package org.apache.cassandra.io.sstable.format;
 
 import org.apache.cassandra.db.DecoratedKey;
-import org.apache.cassandra.db.DeletionTime;
 import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.db.rows.Unfiltered;
 import org.apache.cassandra.io.sstable.KeyReader;
@@ -59,8 +58,6 @@ public interface SSTableFlushObserver
      * Called when all data is written to the file and it's ready to be finished up.
      */
     void complete();
-
-    void partitionLevelDeletion(DeletionTime partitionLevelDeletion);
 
     void staticRow(Row staticRow);
 }

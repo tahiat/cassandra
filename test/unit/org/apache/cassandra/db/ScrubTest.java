@@ -729,9 +729,11 @@ public class ScrubTest
         }
 
         @Override
-        protected long beforeAppend(DecoratedKey decoratedKey)
+        protected boolean startPartition(DecoratedKey key, DeletionTime partitionLevelDeletion)
         {
-            return getDataWriterPosition();
+            // return getDataWriterPosition();
+            // TODO
+            return super.startPartition(key, partitionLevelDeletion);
         }
     }
 

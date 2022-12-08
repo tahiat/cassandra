@@ -23,7 +23,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.*;
 
-import org.apache.cassandra.db.DeletionTime;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.concurrent.ExecutorPlus;
 import org.apache.cassandra.schema.ColumnMetadata;
@@ -99,19 +98,15 @@ public class PerSSTableIndexWriter implements SSTableFlushObserver
             indexes.put(entry.getKey(), newIndex(entry.getValue()));
     }
 
+    @Override
     public void begin()
     {}
 
+    @Override
     public void startPartition(DecoratedKey key, long keyPosition, long KeyPositionForSASI)
     {
         currentKey = key;
         currentKeyPosition = KeyPositionForSASI;
-    }
-
-    @Override
-    public void partitionLevelDeletion(DeletionTime partitionLevelDeletion)
-    {
-        // no-op
     }
 
     @Override
@@ -120,6 +115,7 @@ public class PerSSTableIndexWriter implements SSTableFlushObserver
         nextUnfilteredCluster(staticRow);
     }
 
+    @Override
     public void nextUnfilteredCluster(Unfiltered unfiltered)
     {
         if (!unfiltered.isRow())
@@ -139,6 +135,7 @@ public class PerSSTableIndexWriter implements SSTableFlushObserver
         });
     }
 
+    @Override
     public void complete()
     {
         if (isComplete)

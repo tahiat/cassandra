@@ -23,8 +23,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 import org.apache.cassandra.db.commitlog.CommitLog;
 import org.apache.cassandra.io.sstable.SequenceBasedSSTableId;
@@ -200,7 +198,6 @@ public class SSTableFlushObserverTest
     private static class FlushObserver implements SSTableFlushObserver
     {
         private final Multimap<Triple<ByteBuffer, Long, Long>, Cell<?>> rows = ArrayListMultimap.create();
-        private final Map<Triple<ByteBuffer, Long, Long>, DeletionTime> deletionTimes = new LinkedHashMap<>();
         private final Multimap<Triple<ByteBuffer, Long, Long>, Cell<?>> staticRows = ArrayListMultimap.create();
 
         private Triple<ByteBuffer, Long, Long> currentKey;
@@ -228,12 +225,6 @@ public class SSTableFlushObserverTest
         public void complete()
         {
             isComplete = true;
-        }
-
-        @Override
-        public void partitionLevelDeletion(DeletionTime partitionLevelDeletion)
-        {
-            deletionTimes.put(currentKey, partitionLevelDeletion);
         }
 
         @Override

@@ -176,8 +176,7 @@ public class RowIndexEntryTest extends CQLTester
             SequentialWriterOption option = SequentialWriterOption.newBuilder().bufferSize(1024).build();
             File f = FileUtils.createTempFile("RowIndexEntryTest-", "db");
             dataWriterNew = new SequentialWriter(f, option);
-            partitionWriter = new BigFormatPartitionWriter(header, dataWriterNew, version, Collections.emptyList(),
-                                                           rieSerializer.indexInfoSerializer());
+            partitionWriter = new BigFormatPartitionWriter(header, dataWriterNew, version, rieSerializer.indexInfoSerializer());
 
             f = FileUtils.createTempFile("RowIndexEntryTest-", "db");
             dataWriterOld = new SequentialWriter(f, option);
@@ -194,7 +193,13 @@ public class RowIndexEntryTest extends CQLTester
         {
 
             Iterator<Clustering<?>> clusteringIter = clusterings.iterator();
-            partitionWriter.writePartition(makeRowIter(staticRow, partitionKey, clusteringIter, dataWriterNew));
+            partitionWriter.start(partitionKey, DeletionTime.LIVE);
+            partitionWriter.addStaticRow(staticRow);
+            AbstractUnfilteredRowIterator rowIter = makeRowIter(staticRow, partitionKey, clusteringIter, dataWriterNew);
+            while (rowIter.hasNext())
+                partitionWriter.addUnfiltered(rowIter.next());
+            partitionWriter.finish();
+
             rieNew = RowIndexEntry.create(startPosition, 0L,
                                           deletionInfo, partitionWriter.getHeaderLength(), partitionWriter.getColumnIndexCount(),
                                           partitionWriter.indexInfoSerializedSize(),

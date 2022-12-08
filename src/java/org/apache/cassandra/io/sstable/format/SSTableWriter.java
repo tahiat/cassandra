@@ -34,7 +34,6 @@ import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTable;
-import org.apache.cassandra.io.sstable.format.big.RowIndexEntry;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.sstable.metadata.MetadataComponent;
 import org.apache.cassandra.io.sstable.metadata.MetadataType;
@@ -99,7 +98,7 @@ public abstract class SSTableWriter extends SSTable implements Transactional
      *
      * @throws FSWriteError if a write to the dataFile fails
      */
-    public abstract RowIndexEntry append(UnfilteredRowIterator iterator);
+    public abstract AbstractRowIndexEntry append(UnfilteredRowIterator iterator);
 
     public abstract long getFilePointer();
 
