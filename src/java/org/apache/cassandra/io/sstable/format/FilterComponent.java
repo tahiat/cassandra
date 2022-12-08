@@ -19,21 +19,30 @@
 package org.apache.cassandra.io.sstable.format;
 
 import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.channels.SeekableByteChannel;
+import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.metadata.ValidationMetadata;
+import org.apache.cassandra.io.util.BufferedDataOutputStreamPlus;
+import org.apache.cassandra.io.util.DataOutputStreamPlus;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.io.util.FileInputStreamPlus;
 import org.apache.cassandra.io.util.FileOutputStreamPlus;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.utils.AlwaysPresentFilter;
+import org.apache.cassandra.utils.BloomFilter;
 import org.apache.cassandra.utils.BloomFilterSerializer;
 import org.apache.cassandra.utils.IFilter;
+import org.apache.cassandra.utils.SyncUtil;
 
 public class FilterComponent
 {

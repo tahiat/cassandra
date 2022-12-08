@@ -20,7 +20,7 @@ package org.apache.cassandra.io.sstable.format.trieindex;
 import java.io.IOException;
 
 import org.apache.cassandra.db.DeletionTime;
-import org.apache.cassandra.io.sstable.format.IRowIndexEntry;
+import org.apache.cassandra.io.sstable.format.AbstractRowIndexEntry;
 import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
@@ -31,7 +31,7 @@ import org.apache.cassandra.utils.ObjectSizes;
  * <p>
  * Not to be used outside of package. Public only for IndexRewriter tool.
  */
-public final class TrieIndexEntry extends IRowIndexEntry
+public final class TrieIndexEntry extends AbstractRowIndexEntry
 {
     private static final long BASE_SIZE;
 
@@ -121,7 +121,7 @@ public final class TrieIndexEntry extends IRowIndexEntry
      * Create an index entry. The row index trie must already have been written (by RowIndexWriter) to the row index
      * file and its root position must be specified in trieRoot.
      */
-    public static IRowIndexEntry create(long dataStartPosition,
+    public static AbstractRowIndexEntry create(long dataStartPosition,
                                         long trieRoot,
                                         DeletionTime partitionLevelDeletion,
                                         int rowIndexCount)
@@ -138,7 +138,7 @@ public final class TrieIndexEntry extends IRowIndexEntry
         return new TrieIndexEntry(dataFilePosition, indexTrieRoot, rowIndexCount, deletionTime);
     }
 
-    static class KeyCacheValueSerializer implements IRowIndexEntry.KeyCacheValueSerializer<TrieIndexSSTableReader, TrieIndexEntry>
+    static class KeyCacheValueSerializer implements AbstractRowIndexEntry.KeyCacheValueSerializer<TrieIndexSSTableReader, TrieIndexEntry>
     {
         private final static KeyCacheValueSerializer instance = new KeyCacheValueSerializer();
 

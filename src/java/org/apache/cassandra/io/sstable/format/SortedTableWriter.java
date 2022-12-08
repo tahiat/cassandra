@@ -20,6 +20,7 @@ package org.apache.cassandra.io.sstable.format;
 
 import java.io.IOException;
 import java.nio.BufferOverflowException;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import org.slf4j.Logger;
@@ -38,9 +39,15 @@ import org.apache.cassandra.db.rows.Rows;
 import org.apache.cassandra.db.rows.Unfiltered;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.io.FSWriteError;
+import org.apache.cassandra.io.sstable.Component;
+import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.util.DataPosition;
 import org.apache.cassandra.io.util.SequentialWriter;
+import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.FilterFactory;
+import org.apache.cassandra.utils.IFilter;
+import org.apache.cassandra.utils.concurrent.Transactional;
 
 public abstract class SortedTableWriter<P extends SortedTablePartitionWriter, RIE extends AbstractRowIndexEntry> extends SSTableWriter
 {
@@ -173,7 +180,7 @@ public abstract class SortedTableWriter<P extends SortedTablePartitionWriter, RI
 
     private AbstractRowIndexEntry endPartition(DecoratedKey key, DeletionTime partitionLevelDeletion) throws IOException
     {
-        partitionWriter.finish();
+        long finishResult = partitionWriter.finish();
 
         long endPosition = dataWriter.position();
         long rowSize = endPosition - partitionWriter.getInitialPosition();
@@ -191,7 +198,7 @@ public abstract class SortedTableWriter<P extends SortedTablePartitionWriter, RI
         if (logger.isTraceEnabled())
             logger.trace("wrote {} at {}", key, endPosition);
 
-        return createRowIndexEntry(key, partitionLevelDeletion);
+        return createRowIndexEntry(key, partitionLevelDeletion, finishResult);
     }
 
     protected void onStartPartition(DecoratedKey key)
@@ -214,7 +221,7 @@ public abstract class SortedTableWriter<P extends SortedTablePartitionWriter, RI
         notifyObservers(o -> o.nextUnfilteredCluster(marker));
     }
 
-    protected abstract RIE createRowIndexEntry(DecoratedKey key, DeletionTime partitionLevelDeletion) throws IOException;
+    protected abstract RIE createRowIndexEntry(DecoratedKey key, DeletionTime partitionLevelDeletion, long finishResult) throws IOException;
 
     protected final void notifyObservers(Consumer<SSTableFlushObserver> action)
     {
@@ -268,6 +275,51 @@ public abstract class SortedTableWriter<P extends SortedTablePartitionWriter, RI
         {
             String keyString = metadata().partitionKeyType.getString(key.getKey());
             logger.warn("Writing {} tombstones to {}/{}:{} in sstable {}", tombstoneCount, metadata.keyspace, metadata.name, keyString, getFilename());
+        }
+    }
+
+    protected static abstract class AbstractIndexWriter extends AbstractTransactional implements Transactional
+    {
+        protected final Descriptor descriptor;
+        protected final TableMetadataRef metadata;
+        protected final Set<Component> components;
+
+        protected final IFilter bf;
+
+        protected AbstractIndexWriter(SortedTableWriterBuilder<?, ?, ?, ?> b)
+        {
+            this.descriptor = b.descriptor;
+            this.metadata = b.getTableMetadataRef();
+            this.components = b.getComponents();
+
+            bf = FilterFactory.getFilter(b.getKeyCount(), b.getTableMetadataRef().getLocal().params.bloomFilterFpChance);
+        }
+
+        protected void flushBf()
+        {
+            if (components.contains(Component.FILTER))
+            {
+                try
+                {
+                    FilterComponent.saveOrDeleteCorrupted(descriptor, bf);
+                }
+                catch (IOException ex)
+                {
+                    throw new FSWriteError(ex, descriptor.fileFor(Component.FILTER));
+                }
+            }
+        }
+
+        protected void doPrepare()
+        {
+            flushBf();
+        }
+
+        @Override
+        protected Throwable doPostCleanup(Throwable accumulate)
+        {
+            accumulate = bf.close(accumulate);
+            return accumulate;
         }
     }
 }

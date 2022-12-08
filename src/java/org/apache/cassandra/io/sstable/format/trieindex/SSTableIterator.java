@@ -24,7 +24,7 @@ import org.apache.cassandra.db.Slice;
 import org.apache.cassandra.db.Slices;
 import org.apache.cassandra.db.filter.ColumnFilter;
 import org.apache.cassandra.io.sstable.AbstractSSTableIterator;
-import org.apache.cassandra.io.sstable.format.IRowIndexEntry;
+import org.apache.cassandra.io.sstable.format.AbstractRowIndexEntry;
 import org.apache.cassandra.io.sstable.format.trieindex.RowIndexReader.IndexInfo;
 import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.io.util.FileHandle;
@@ -32,7 +32,7 @@ import org.apache.cassandra.io.util.FileHandle;
 /**
  *  A Cell Iterator over SSTable
  */
-class SSTableIterator extends AbstractSSTableIterator<IRowIndexEntry>
+class SSTableIterator extends AbstractSSTableIterator<AbstractRowIndexEntry>
 {
     /**
      * The index of the slice being processed.
@@ -42,7 +42,7 @@ class SSTableIterator extends AbstractSSTableIterator<IRowIndexEntry>
     public SSTableIterator(TrieIndexSSTableReader sstable,
                            FileDataInput file,
                            DecoratedKey key,
-                           IRowIndexEntry indexEntry,
+                           AbstractRowIndexEntry indexEntry,
                            Slices slices,
                            ColumnFilter columns,
                            FileHandle ifile)
@@ -50,7 +50,7 @@ class SSTableIterator extends AbstractSSTableIterator<IRowIndexEntry>
         super(sstable, file, key, indexEntry, slices, columns, ifile);
     }
 
-    protected Reader createReaderInternal(IRowIndexEntry indexEntry, FileDataInput file, boolean shouldCloseFile)
+    protected Reader createReaderInternal(AbstractRowIndexEntry indexEntry, FileDataInput file, boolean shouldCloseFile)
     {
         return indexEntry.isIndexed()
              ? new ForwardIndexedReader(indexEntry, file, shouldCloseFile)
@@ -79,7 +79,7 @@ class SSTableIterator extends AbstractSSTableIterator<IRowIndexEntry>
         private final RowIndexReader indexReader;
         long basePosition;
 
-        private ForwardIndexedReader(IRowIndexEntry indexEntry, FileDataInput file, boolean shouldCloseFile)
+        private ForwardIndexedReader(AbstractRowIndexEntry indexEntry, FileDataInput file, boolean shouldCloseFile)
         {
             super(file, shouldCloseFile);
             basePosition = indexEntry.position;

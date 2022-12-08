@@ -55,7 +55,7 @@ import static org.apache.cassandra.io.sstable.format.SSTableReaderBuilder.defaul
 /**
  * Bigtable format with trie indices
  */
-public class TrieIndexFormat implements SSTableFormat<TrieIndexSSTableReader, TrieIndexSSTableWriter>
+public class TrieIndexFormat implements SSTableFormat<TrieIndexSSTableReader, BtiTableWriter>
 {
     private final static Set<Component> STREAMING_COMPONENTS = ImmutableSet.of(Component.DATA,
                                                                                Component.PARTITION_INDEX,
@@ -169,7 +169,7 @@ public class TrieIndexFormat implements SSTableFormat<TrieIndexSSTableReader, Tr
         return WRITE_COMPONENTS;
     }
 
-    static class WriterFactory extends SSTableWriter.Factory<TrieIndexSSTableWriter, BTIWriterBuilder>
+    static class WriterFactory extends SSTableWriter.Factory<BtiTableWriter, BTIWriterBuilder>
     {
         @Override
         public long estimateSize(SSTableWriter.SSTableSizeParameters parameters)
@@ -181,20 +181,20 @@ public class TrieIndexFormat implements SSTableFormat<TrieIndexSSTableReader, Tr
         }
 
         @Override
-        public TrieIndexSSTableWriter open(Descriptor descriptor,
-                                  long keyCount,
-                                  long repairedAt,
-                                  UUID pendingRepair,
-                                  boolean isTransient,
-                                  TableMetadataRef metadata,
-                                  MetadataCollector metadataCollector,
-                                  SerializationHeader header,
-                                  Collection<SSTableFlushObserver> observers,
-                                  LifecycleNewTracker lifecycleNewTracker,
-                                  Set<Component> indexComponents)
+        public BtiTableWriter open(Descriptor descriptor,
+                                   long keyCount,
+                                   long repairedAt,
+                                   UUID pendingRepair,
+                                   boolean isTransient,
+                                   TableMetadataRef metadata,
+                                   MetadataCollector metadataCollector,
+                                   SerializationHeader header,
+                                   Collection<SSTableFlushObserver> observers,
+                                   LifecycleNewTracker lifecycleNewTracker,
+                                   Set<Component> indexComponents)
         {
             SSTable.validateRepairedMetadata(repairedAt, pendingRepair, isTransient);
-            return new TrieIndexSSTableWriter(descriptor, keyCount, repairedAt, pendingRepair, isTransient, metadata, metadataCollector, header, observers, lifecycleNewTracker, indexComponents);
+            return new BtiTableWriter(descriptor, keyCount, repairedAt, pendingRepair, isTransient, metadata, metadataCollector, header, observers, lifecycleNewTracker, indexComponents);
         }
     }
 

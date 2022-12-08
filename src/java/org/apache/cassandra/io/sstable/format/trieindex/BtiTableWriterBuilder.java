@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package org.apache.cassandra.io.sstable.format.big;
+package org.apache.cassandra.io.sstable.format.trieindex;
 
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.io.sstable.DataComponent;
@@ -25,14 +25,13 @@ import org.apache.cassandra.io.sstable.format.SortedTableWriterBuilder;
 import org.apache.cassandra.io.util.SequentialWriter;
 import org.apache.cassandra.utils.Throwables;
 
-public class BigTableWriterBuilder extends SortedTableWriterBuilder<RowIndexEntry, BigFormatPartitionWriter, BigTableWriter, BigTableWriterBuilder>
+public class BtiTableWriterBuilder extends SortedTableWriterBuilder<TrieIndexEntry, BtiFormatPartitionWriter, BtiTableWriter, BtiTableWriterBuilder>
 {
-    private RowIndexEntry.IndexSerializer rowIndexEntrySerializer;
-    private BigTableWriter.IndexWriter indexWriter;
     private SequentialWriter dataWriter;
-    private BigFormatPartitionWriter partitionWriter;
+    private BtiFormatPartitionWriter partitionWriter;
+    private BtiTableWriter.IndexWriter indexWriter;
 
-    public BigTableWriterBuilder(Descriptor descriptor)
+    public BtiTableWriterBuilder(Descriptor descriptor)
     {
         super(descriptor);
     }
@@ -44,36 +43,38 @@ public class BigTableWriterBuilder extends SortedTableWriterBuilder<RowIndexEntr
     }
 
     @Override
-    public BigFormatPartitionWriter getPartitionWriter()
+    public BtiFormatPartitionWriter getPartitionWriter()
     {
         return partitionWriter;
     }
 
-    public RowIndexEntry.IndexSerializer getRowIndexEntrySerializer()
-    {
-        return rowIndexEntrySerializer;
-    }
-
-    public BigTableWriter.IndexWriter getIndexWriter()
+    public BtiTableWriter.IndexWriter getIndexWriter()
     {
         return indexWriter;
     }
 
     @Override
-    protected BigTableWriter buildInternal(LifecycleNewTracker lifecycleNewTracker)
+    protected BtiTableWriter buildInternal(LifecycleNewTracker lifecycleNewTracker)
     {
         try
         {
-            rowIndexEntrySerializer = new RowIndexEntry.Serializer(descriptor.version, getSerializationHeader());
             dataWriter = DataComponent.buildWriter(descriptor,
                                                    getTableMetadataRef().getLocal(),
                                                    getIOOptions().writerOptions,
                                                    getMetadataCollector(),
                                                    lifecycleNewTracker.opType(),
                                                    getIOOptions().flushCompression);
-            indexWriter = new BigTableWriter.IndexWriter(this);
-            partitionWriter = new BigFormatPartitionWriter(getSerializationHeader(), dataWriter, descriptor.version, rowIndexEntrySerializer.indexInfoSerializer());
-            return new BigTableWriter(this, lifecycleNewTracker);
+
+            indexWriter = new BtiTableWriter.IndexWriter(getTableMetadataRef().getLocal());
+            partitionWriter = new BtiFormatPartitionWriter(getSerializationHeader(),
+                                                           getTableMetadataRef().getLocal().comparator,
+                                                           dataWriter,
+                                                           indexWriter.rowIndexFile,
+                                                           descriptor.version,
+                                                           getFlushObservers());
+
+
+            return new BtiTableWriter(this, lifecycleNewTracker);
         }
         catch (RuntimeException | Error ex)
         {
@@ -82,8 +83,6 @@ public class BigTableWriterBuilder extends SortedTableWriterBuilder<RowIndexEntr
         }
         finally
         {
-            rowIndexEntrySerializer = null;
-            indexWriter = null;
             dataWriter = null;
             partitionWriter = null;
         }

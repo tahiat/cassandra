@@ -32,7 +32,7 @@ import org.apache.cassandra.db.rows.RangeTombstoneBoundMarker;
 import org.apache.cassandra.db.rows.RangeTombstoneMarker;
 import org.apache.cassandra.db.rows.Unfiltered;
 import org.apache.cassandra.io.sstable.AbstractSSTableIterator;
-import org.apache.cassandra.io.sstable.format.IRowIndexEntry;
+import org.apache.cassandra.io.sstable.format.AbstractRowIndexEntry;
 import org.apache.cassandra.io.sstable.format.trieindex.RowIndexReader.IndexInfo;
 import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.io.util.FileHandle;
@@ -240,7 +240,7 @@ class SSTableReversedIterator extends AbstractSSTableIterator<TrieIndexEntry>
         Slice currentSlice;
         long currentBlockStart;
 
-        public ReverseIndexedReader(IRowIndexEntry indexEntry, FileDataInput file, boolean shouldCloseFile)
+        public ReverseIndexedReader(AbstractRowIndexEntry indexEntry, FileDataInput file, boolean shouldCloseFile)
         {
             super(file, shouldCloseFile);
             basePosition = indexEntry.position;

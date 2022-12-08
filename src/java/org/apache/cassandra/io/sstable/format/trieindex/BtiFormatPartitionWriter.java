@@ -32,35 +32,35 @@ import org.apache.cassandra.io.sstable.format.trieindex.RowIndexReader.IndexInfo
 import org.apache.cassandra.io.util.SequentialWriter;
 
 /**
- * Partition writer used by {@link TrieIndexSSTableWriter}.
+ * Partition writer used by {@link BtiTableWriter}.
  * <p>
  * Writes all passed data to the given SequentialWriter and if necessary builds a RowIndex by constructing an entry
  * for each row within a partition that follows {@link org.apache.cassandra.config.Config#column_index_size} of written
  * data.
  */
-class PartitionWriter extends SortedTablePartitionWriter
+class BtiFormatPartitionWriter extends SortedTablePartitionWriter
 {
     private final RowIndexWriter rowTrie;
     private final int indexSize;
     private int rowIndexCount;
 
-    PartitionWriter(SerializationHeader header,
-                    ClusteringComparator comparator,
-                    SequentialWriter writer,
-                    SequentialWriter indexWriter,
-                    Version version,
-                    Collection<SSTableFlushObserver> observers)
+    BtiFormatPartitionWriter(SerializationHeader header,
+                             ClusteringComparator comparator,
+                             SequentialWriter writer,
+                             SequentialWriter indexWriter,
+                             Version version,
+                             Collection<SSTableFlushObserver> observers)
     {
         this(header, comparator, writer, indexWriter, version, observers, DatabaseDescriptor.getColumnIndexSize());
     }
 
-    PartitionWriter(SerializationHeader header,
-                    ClusteringComparator comparator,
-                    SequentialWriter writer,
-                    SequentialWriter indexWriter,
-                    Version version,
-                    Collection<SSTableFlushObserver> observers,
-                    int indexSize)
+    BtiFormatPartitionWriter(SerializationHeader header,
+                             ClusteringComparator comparator,
+                             SequentialWriter writer,
+                             SequentialWriter indexWriter,
+                             Version version,
+                             Collection<SSTableFlushObserver> observers,
+                             int indexSize)
     {
         super(header, writer, version, observers);
         this.indexSize = indexSize;

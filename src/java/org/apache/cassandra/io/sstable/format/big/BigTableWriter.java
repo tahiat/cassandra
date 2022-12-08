@@ -19,7 +19,6 @@ package org.apache.cassandra.io.sstable.format.big;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Set;
 import java.util.function.Consumer;
 
 import com.google.common.collect.ImmutableList;
@@ -34,11 +33,9 @@ import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.compress.CompressedSequentialWriter;
 import org.apache.cassandra.io.sstable.Component;
-import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.Downsampling;
 import org.apache.cassandra.io.sstable.IndexSummary;
 import org.apache.cassandra.io.sstable.IndexSummaryBuilder;
-import org.apache.cassandra.io.sstable.format.FilterComponent;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.io.sstable.format.SortedTableWriter;
@@ -47,14 +44,10 @@ import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.io.util.FileHandle;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.io.util.SequentialWriter;
-import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.EstimatedHistogram;
-import org.apache.cassandra.utils.FilterFactory;
-import org.apache.cassandra.utils.IFilter;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.Throwables;
-import org.apache.cassandra.utils.concurrent.Transactional;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.cassandra.utils.Clock.Global.currentTimeMillis;
@@ -97,7 +90,7 @@ public class BigTableWriter extends SortedTableWriter<BigFormatPartitionWriter, 
     }
 
     @Override
-    protected RowIndexEntry createRowIndexEntry(DecoratedKey key, DeletionTime partitionLevelDeletion) throws IOException
+    protected RowIndexEntry createRowIndexEntry(DecoratedKey key, DeletionTime partitionLevelDeletion, long finishResult) throws IOException
     {
         // afterAppend() writes the partition key before the first RowIndexEntry - so we have to add it's
         // serialized size to the index-writer position
@@ -225,33 +218,26 @@ public class BigTableWriter extends SortedTableWriter<BigFormatPartitionWriter, 
     /**
      * Encapsulates writing the index and filter for an SSTable. The state of this object is not valid until it has been closed.
      */
-    static class IndexWriter extends AbstractTransactional implements Transactional
+    static class IndexWriter extends SortedTableWriter.AbstractIndexWriter
     {
-        private final Descriptor descriptor;
-        private final TableMetadataRef metadata;
-        private final Set<Component> components;
         private final RowIndexEntry.IndexSerializer rowIndexEntrySerializer;
 
         final SequentialWriter writer;
         final FileHandle.Builder builder;
         final IndexSummaryBuilder summary;
-        final IFilter bf;
         private DataPosition mark;
         private DecoratedKey first;
         private DecoratedKey last;
 
-        IndexWriter(BigTableWriterBuilder b)
+        protected IndexWriter(BigTableWriterBuilder b)
         {
-            this.descriptor = b.descriptor;
-            this.metadata = b.getTableMetadataRef();
-            this.components = b.getComponents();
+            super(b);
             this.rowIndexEntrySerializer = b.getRowIndexEntrySerializer();
 
             writer = new SequentialWriter(new File(b.descriptor.filenameFor(Component.PRIMARY_INDEX)), b.getIOOptions().writerOptions);
             builder = new FileHandle.Builder(b.descriptor.fileFor(Component.PRIMARY_INDEX)).mmapped(DatabaseDescriptor.getIndexAccessMode() == Config.DiskAccessMode.mmap);
             builder.withChunkCache(b.getChunkCache());
             summary = new IndexSummaryBuilder(b.getKeyCount(), b.getTableMetadataRef().getLocal().params.minIndexInterval, Downsampling.BASE_SAMPLING_LEVEL);
-            bf = FilterFactory.getFilter(b.getKeyCount(), b.getTableMetadataRef().getLocal().params.bloomFilterFpChance);
             // register listeners to be alerted when the data files are flushed
             writer.setPostFlushListener(() -> summary.markIndexSynced(writer.getLastFlushOffset()));
             b.getDataWriter().setPostFlushListener(() -> summary.markDataSynced(b.getDataWriter().getLastFlushOffset()));
@@ -288,24 +274,6 @@ public class BigTableWriter extends SortedTableWriter<BigFormatPartitionWriter, 
             summary.maybeAddEntry(key, indexStart, indexEnd, dataEnd);
         }
 
-        /**
-         * Closes the index and bloomfilter, making the public state of this writer valid for consumption.
-         */
-        void flushBf()
-        {
-            if (components.contains(Component.FILTER))
-            {
-                try
-                {
-                    FilterComponent.saveOrDeleteCorrupted(descriptor, bf);
-                }
-                catch (IOException ex)
-                {
-                    throw new FSWriteError(ex, descriptor.fileFor(Component.FILTER));
-                }
-            }
-        }
-
         public void mark()
         {
             mark = writer.mark();
@@ -324,7 +292,7 @@ public class BigTableWriter extends SortedTableWriter<BigFormatPartitionWriter, 
             checkNotNull(first);
             checkNotNull(last);
 
-            flushBf();
+            super.doPrepare();
 
             // truncate index file
             long position = writer.position();
@@ -356,8 +324,8 @@ public class BigTableWriter extends SortedTableWriter<BigFormatPartitionWriter, 
         @Override
         protected Throwable doPostCleanup(Throwable accumulate)
         {
+            accumulate = super.doPostCleanup(accumulate);
             accumulate = summary.close(accumulate);
-            accumulate = bf.close(accumulate);
             return accumulate;
         }
     }
