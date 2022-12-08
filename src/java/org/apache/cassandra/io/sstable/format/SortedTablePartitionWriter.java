@@ -29,12 +29,15 @@ import org.apache.cassandra.db.DeletionTime;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.rows.RangeTombstoneMarker;
 import org.apache.cassandra.db.rows.Row;
+import org.apache.cassandra.db.rows.Rows;
 import org.apache.cassandra.db.rows.SerializationHelper;
 import org.apache.cassandra.db.rows.Unfiltered;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.db.rows.UnfilteredSerializer;
 import org.apache.cassandra.io.util.SequentialWriter;
 import org.apache.cassandra.utils.ByteBufferUtil;
+
+import static com.google.common.base.Preconditions.checkState;
 
 public abstract class SortedTablePartitionWriter implements AutoCloseable
 {
@@ -59,6 +62,17 @@ public abstract class SortedTablePartitionWriter implements AutoCloseable
     protected DeletionTime openMarker = DeletionTime.LIVE;
     protected DeletionTime startOpenMarker = DeletionTime.LIVE;
 
+    // Sequence control, also used to add empty static row if `addStaticRow` is not called.
+    private enum State
+    {
+        AWAITING_PARTITION_HEADER,
+        AWAITING_STATIC_ROW,
+        AWAITING_ROWS,
+        COMPLETED
+    }
+
+    State state;
+
     protected SortedTablePartitionWriter(SerializationHeader header,
                                          SequentialWriter writer,
                                          Version version,
@@ -82,6 +96,7 @@ public abstract class SortedTablePartitionWriter implements AutoCloseable
         this.lastClustering = null;
         this.openMarker = DeletionTime.LIVE;
         this.headerLength = -1;
+        this.state = State.AWAITING_PARTITION_HEADER;
     }
 
     public long getHeaderLength()
@@ -95,13 +110,12 @@ public abstract class SortedTablePartitionWriter implements AutoCloseable
         reset();
 
         writePartitionHeader(iterator.partitionKey(), iterator.partitionLevelDeletion(), iterator.staticRow());
-        this.headerLength = writer.position() - initialPosition;
 
         while (iterator.hasNext())
         {
             Unfiltered unfiltered = iterator.next();
             SSTableWriter.guardCollectionSize(iterator.metadata(), iterator.partitionKey(), unfiltered);
-            add(unfiltered);
+            addUnfiltered(unfiltered);
         }
 
         finish();
@@ -109,22 +123,52 @@ public abstract class SortedTablePartitionWriter implements AutoCloseable
 
     protected void writePartitionHeader(DecoratedKey key, DeletionTime partitionLevelDeletion, Row staticRow) throws IOException
     {
+        checkState(state == State.AWAITING_PARTITION_HEADER);
         ByteBufferUtil.writeWithShortLength(key.getKey(), writer);
 
         DeletionTime.serializer.serialize(partitionLevelDeletion, writer);
         if (!observers.isEmpty())
             observers.forEach((o) -> o.partitionLevelDeletion(partitionLevelDeletion));
 
-        if (header.hasStatic() && !staticRow.isEmpty())
+        if (!header.hasStatic())
         {
-            UnfilteredSerializer.serializer.serializeStaticRow(staticRow, helper, writer, version);
-            if (!observers.isEmpty())
-                observers.forEach(o -> o.staticRow(staticRow));
+            this.headerLength = writer.position() - initialPosition;
+            state = State.AWAITING_ROWS;
+            return;
         }
+
+        state = State.AWAITING_STATIC_ROW;
     }
 
-    protected void add(Unfiltered unfiltered) throws IOException
+    protected void writeStaticRow(Row staticRow) throws IOException
     {
+        checkState(state == State.AWAITING_STATIC_ROW);
+        checkState(staticRow.isStatic());
+
+        UnfilteredSerializer.serializer.serializeStaticRow(staticRow, helper, writer, version);
+
+        if (!observers.isEmpty())
+            observers.forEach(o -> o.staticRow(staticRow));
+
+        this.headerLength = writer.position() - initialPosition;
+        state = State.AWAITING_ROWS;
+    }
+
+    public void addUnfiltered(Unfiltered unfiltered) throws IOException
+    {
+        if (state == State.AWAITING_STATIC_ROW)
+        {
+            if (unfiltered.isRow() && ((Row) unfiltered).isStatic())
+            {
+                writeStaticRow((Row) unfiltered);
+                return;
+            }
+
+            writeStaticRow(Rows.EMPTY_STATIC_ROW);
+        }
+
+        checkState(state == State.AWAITING_ROWS);
+
         long pos = currentPosition();
 
         if (firstClustering == null)
@@ -155,6 +199,13 @@ public abstract class SortedTablePartitionWriter implements AutoCloseable
 
     protected long finish() throws IOException
     {
+        if (state == State.AWAITING_STATIC_ROW)
+            writeStaticRow(Rows.EMPTY_STATIC_ROW);
+
+        checkState(state == State.AWAITING_ROWS);
+
+        state = State.COMPLETED;
+
         long endPosition = currentPosition();
         unfilteredSerializer.writeEndOfPartition(writer);
 

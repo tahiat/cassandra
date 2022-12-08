@@ -206,9 +206,9 @@ public class BigFormatPartitionWriter extends SortedTablePartitionWriter
     }
 
     @Override
-    public void add(Unfiltered unfiltered) throws IOException
+    public void addUnfiltered(Unfiltered unfiltered) throws IOException
     {
-        super.add(unfiltered);
+        super.addUnfiltered(unfiltered);
 
         // if we hit the column index size that we have to index after, go ahead and index it.
         if (currentPosition() - startPosition >= indexSize)
