@@ -52,6 +52,8 @@ class PartitionIterator extends PartitionIndex.IndexPosIterator implements KeyRe
      * Note: For performance reasons this class does not request a reference of the files it uses.
      * If it is the only reference to the data, caller must request shared copies and apply closeHandles().
      */
+
+    // TODO closeHandles should be by default, auto-advancing should NOT be in the constructor - basically make it compatible with BIG key iterator
     PartitionIterator(PartitionIndex partitionIndex, IPartitioner partitioner, FileHandle rowIndexFile, FileHandle dataFile,
                       PartitionPosition left, int inclusiveLeft, PartitionPosition right, int exclusiveRight) throws IOException
     {

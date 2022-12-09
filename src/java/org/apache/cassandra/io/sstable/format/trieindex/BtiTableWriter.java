@@ -100,10 +100,10 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter, 
             int dataBufferSize = ioOptions.diskOptimizationStrategy.bufferSize(stats.estimatedPartitionSize.percentile(DatabaseDescriptor.getDiskOptimizationEstimatePercentile()));
             FileHandle dfile = dbuilder.bufferSize(dataBufferSize).complete(dataWriter.getLastFlushOffset());
             invalidateCacheAtBoundary(dfile);
-            SSTableReader sstable = TrieIndexSSTableReader.internalOpen(descriptor,
-                                                                        components, metadata,
-                                                                        ifile, dfile, partitionIndex, iwriter.bf.sharedCopy(),
-                                                                        maxDataAge, stats, SSTableReader.OpenReason.EARLY, header);
+            SSTableReader sstable = BtiTableReader.internalOpen(descriptor,
+                                                                components, metadata,
+                                                                ifile, dfile, partitionIndex, iwriter.bf.sharedCopy(),
+                                                                maxDataAge, stats, SSTableReader.OpenReason.EARLY, header);
 
             sstable.first = getMinimalKey(partitionIndex.firstKey());
             sstable.last = getMinimalKey(partitionIndex.lastKey());
@@ -140,17 +140,17 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter, 
             dbuilder.withCompressionMetadata(((CompressedSequentialWriter) dataWriter).open(dataWriter.getLastFlushOffset()));
         FileHandle dfile = dbuilder.bufferSize(dataBufferSize).complete();
         invalidateCacheAtBoundary(dfile);
-        SSTableReader sstable = TrieIndexSSTableReader.internalOpen(descriptor,
-                                                                    components,
-                                                                    this.metadata,
-                                                                    rowIndexFile,
-                                                                    dfile,
-                                                                    partitionIndex,
-                                                                    iwriter.bf.sharedCopy(),
-                                                                    maxDataAge,
-                                                                    stats,
-                                                                    openReason,
-                                                                    header);
+        SSTableReader sstable = BtiTableReader.internalOpen(descriptor,
+                                                            components,
+                                                            this.metadata,
+                                                            rowIndexFile,
+                                                            dfile,
+                                                            partitionIndex,
+                                                            iwriter.bf.sharedCopy(),
+                                                            maxDataAge,
+                                                            stats,
+                                                            openReason,
+                                                            header);
         sstable.first = getMinimalKey(first);
         sstable.last = getMinimalKey(last);
         sstable.setup(true);

@@ -27,7 +27,6 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.io.sstable.Component;
-import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.sstable.Downsampling;
 import org.apache.cassandra.io.sstable.IndexSummary;
 import org.apache.cassandra.io.sstable.IndexSummaryBuilder;
@@ -43,7 +42,6 @@ import org.apache.cassandra.io.sstable.metadata.ValidationMetadata;
 import org.apache.cassandra.io.util.DiskOptimizationStrategy;
 import org.apache.cassandra.io.util.FileHandle;
 import org.apache.cassandra.io.util.RandomAccessReader;
-import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.utils.AlwaysPresentFilter;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
@@ -81,13 +79,13 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
 
             boolean filterNeeded = online && builder.getComponents().contains(Component.FILTER);
             if (filterNeeded)
-                builder.setFilter(loadFilter(builder, validationMetadata));
+                builder.setFilter(loadFilter(validationMetadata));
             boolean rebuildFilter = filterNeeded && builder.getFilter() == null;
 
             boolean summaryNeeded = builder.getComponents().contains(Component.SUMMARY);
             if (summaryNeeded)
             {
-                IndexSummaryComponent summaryComponent = loadSummary(builder);
+                IndexSummaryComponent summaryComponent = loadSummary();
                 builder.setFirst(summaryComponent.first);
                 builder.setLast(summaryComponent.last);
                 builder.setIndexSummary(summaryComponent.indexSummary);
@@ -96,7 +94,7 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
 
             if (rebuildFilter || rebuildSummary)
             {
-                Pair<IFilter, IndexSummaryComponent> filterAndSummary = buildSummaryAndBloomFilter(builder, rebuildFilter, rebuildSummary);
+                Pair<IFilter, IndexSummaryComponent> filterAndSummary = buildSummaryAndBloomFilter(indexFile, builder.getSerializationHeader(), rebuildFilter, rebuildSummary);
                 IFilter filter = filterAndSummary.left;
                 IndexSummaryComponent summaryComponent = filterAndSummary.right;
 
@@ -135,24 +133,6 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
         }
     }
 
-    /**
-     * Check if sstable is created using same partitioner.
-     * Partitioner can be null, which indicates older version of sstable or no stats available.
-     * In that case, we skip the check.
-     */
-    private void validatePartitioner(TableMetadata metadata, ValidationMetadata validationMetadata)
-    {
-        String partitionerName = metadata.partitioner.getClass().getCanonicalName();
-        if (validationMetadata != null && !partitionerName.equals(validationMetadata.partitioner))
-        {
-            throw new CorruptSSTableException(new IOException(String.format("Cannot open %s; partitioner %s does not match system partitioner %s. " +
-                                                                            "Note that the default partitioner starting with Cassandra 1.2 is Murmur3Partitioner, " +
-                                                                            "so you will need to edit that to match your old partitioner if upgrading.",
-                                                                            descriptor, validationMetadata.partitioner, partitionerName)),
-                                              descriptor.filenameFor(Component.STATS));
-        }
-    }
-
     @Override
     public KeyReader buildKeyReader() throws IOException
     {
@@ -180,30 +160,33 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
      * @param rebuildSummary true if index summary, first and last keys should be rebuilt
      * @return
      */
-    private Pair<IFilter, IndexSummaryComponent> buildSummaryAndBloomFilter(BigTableReaderBuilder builder, boolean rebuildFilter, boolean rebuildSummary) throws IOException
+    private Pair<IFilter, IndexSummaryComponent> buildSummaryAndBloomFilter(FileHandle indexFile,
+                                                                            SerializationHeader serializationHeader,
+                                                                            boolean rebuildFilter,
+                                                                            boolean rebuildSummary) throws IOException
     {
-        checkNotNull(builder.getIndexFile());
-        checkNotNull(builder.getSerializationHeader());
+        checkNotNull(indexFile);
+        checkNotNull(serializationHeader);
 
         DecoratedKey first = null, key = null;
         IFilter bf = null;
         IndexSummary indexSummary = null;
 
         // we read the positions in a BRAF, so we don't have to worry about an entry spanning a mmap boundary.
-        try (KeyReader keyReader = createKeyReader(builder.getIndexFile(), builder.getSerializationHeader()))
+        try (KeyReader keyReader = createKeyReader(indexFile, serializationHeader))
         {
-            long estimatedRowsNumber = rebuildFilter || rebuildSummary ? estimateRowsFromIndex(builder) : 0;
+            long estimatedRowsNumber = rebuildFilter || rebuildSummary ? estimateRowsFromIndex(indexFile) : 0;
 
             if (rebuildFilter)
-                bf = FilterFactory.getFilter(estimatedRowsNumber, builder.getTableMetadataRef().get().params.bloomFilterFpChance);
+                bf = FilterFactory.getFilter(estimatedRowsNumber, tableMetadataRef.getLocal().params.bloomFilterFpChance);
 
             try (IndexSummaryBuilder summaryBuilder = !rebuildSummary ? null : new IndexSummaryBuilder(estimatedRowsNumber,
-                                                                                                       builder.getTableMetadataRef().get().params.minIndexInterval,
+                                                                                                       tableMetadataRef.getLocal().params.minIndexInterval,
                                                                                                        Downsampling.BASE_SAMPLING_LEVEL))
             {
                 while (!keyReader.isExhausted())
                 {
-                    key = builder.getTableMetadataRef().get().partitioner.decorateKey(keyReader.key());
+                    key = tableMetadataRef.getLocal().partitioner.decorateKey(keyReader.key());
                     if (rebuildSummary)
                     {
                         if (first == null)
@@ -216,7 +199,7 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
                 }
 
                 if (rebuildSummary)
-                    indexSummary = summaryBuilder.build(builder.getTableMetadataRef().get().partitioner);
+                    indexSummary = summaryBuilder.build(tableMetadataRef.getLocal().partitioner);
             }
         }
         catch (IOException | RuntimeException | Error ex)
@@ -228,11 +211,11 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
         return Pair.create(bf, new IndexSummaryComponent(indexSummary, first, key));
     }
 
-    private IFilter loadFilter(BigTableReaderBuilder builder, ValidationMetadata validationMetadata)
+    private IFilter loadFilter(ValidationMetadata validationMetadata)
     {
         return FilterComponent.maybeLoadBloomFilter(descriptor,
-                                                    builder.getComponents(),
-                                                    builder.getTableMetadataRef().get(),
+                                                    components,
+                                                    tableMetadataRef.getLocal(),
                                                     validationMetadata);
     }
 
@@ -242,12 +225,12 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
      * if loaded index summary has different index interval from current value stored in schema,
      * then Summary.db file will be deleted and need to be rebuilt.
      */
-    private IndexSummaryComponent loadSummary(BigTableReaderBuilder builder)
+    private IndexSummaryComponent loadSummary()
     {
         IndexSummaryComponent summaryComponent = null;
         try
         {
-            summaryComponent = IndexSummaryComponent.loadOrDeleteCorrupted(descriptor, builder.getTableMetadataRef().get());
+            summaryComponent = IndexSummaryComponent.loadOrDeleteCorrupted(descriptor, tableMetadataRef.get());
             if (summaryComponent == null)
             {
                 logger.debug("Index summary file is missing: {}", descriptor.filenameFor(Component.SUMMARY));
@@ -261,25 +244,24 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
         return summaryComponent;
     }
 
-    private long calculateEstimatedKeys(BigTableReaderBuilder builder) throws IOException
+    private long calculateEstimatedKeys(StatsMetadata statsMetadata) throws IOException
     {
-        checkNotNull(builder.getStatsMetadata());
+        checkNotNull(statsMetadata);
 
-        StatsMetadata statsMetadata = builder.getStatsMetadata();
         if (statsMetadata.totalRows > 0)
             return statsMetadata.totalRows;
         long histogramCount = statsMetadata.estimatedPartitionSize.count();
-        return histogramCount > 0 && !statsMetadata.estimatedPartitionSize.isOverflowed() ? histogramCount : estimateRowsFromIndex(builder);
+        return histogramCount > 0 && !statsMetadata.estimatedPartitionSize.isOverflowed() ? histogramCount : estimateRowsFromIndex(indexFile);
     }
 
     /**
      * @return An estimate of the number of keys contained in the given index file.
      */
-    public long estimateRowsFromIndex(BigTableReaderBuilder builder) throws IOException
+    public long estimateRowsFromIndex(FileHandle indexFile) throws IOException
     {
-        checkNotNull(builder.getIndexFile());
+        checkNotNull(indexFile);
 
-        try (RandomAccessReader indexReader = builder.getIndexFile().createReader())
+        try (RandomAccessReader indexReader = indexFile.createReader())
         {
             // collect sizes for the first 10000 keys, or first 10 mebibytes of data
             final int samplesCap = 10000;

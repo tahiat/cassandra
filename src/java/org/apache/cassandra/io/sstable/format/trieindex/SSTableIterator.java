@@ -39,7 +39,7 @@ class SSTableIterator extends AbstractSSTableIterator<AbstractRowIndexEntry>
      */
     private int slice;
 
-    public SSTableIterator(TrieIndexSSTableReader sstable,
+    public SSTableIterator(BtiTableReader sstable,
                            FileDataInput file,
                            DecoratedKey key,
                            AbstractRowIndexEntry indexEntry,

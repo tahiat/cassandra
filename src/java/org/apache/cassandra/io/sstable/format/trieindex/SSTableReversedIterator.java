@@ -47,7 +47,7 @@ class SSTableReversedIterator extends AbstractSSTableIterator<TrieIndexEntry>
      */
     private int slice;
 
-    public SSTableReversedIterator(TrieIndexSSTableReader sstable,
+    public SSTableReversedIterator(BtiTableReader sstable,
                                    FileDataInput file,
                                    DecoratedKey key,
                                    TrieIndexEntry indexEntry,

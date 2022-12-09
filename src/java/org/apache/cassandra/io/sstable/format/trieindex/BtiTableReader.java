@@ -80,9 +80,9 @@ import static org.apache.cassandra.io.sstable.format.SSTableReader.Operator.GT;
  * SSTableReaders are open()ed by Keyspace.onStart; after that they are created by SSTableWriter.renameAndOpen.
  * Do not re-call open() on existing SSTable files; use the references kept by ColumnFamilyStore post-start instead.
  */
-public class TrieIndexSSTableReader extends SSTableReader
+public class BtiTableReader extends SSTableReader
 {
-    private static final Logger logger = LoggerFactory.getLogger(TrieIndexSSTableReader.class);
+    private static final Logger logger = LoggerFactory.getLogger(BtiTableReader.class);
 
     protected FileHandle rowIndexFile;
     protected PartitionIndex partitionIndex;
@@ -90,7 +90,7 @@ public class TrieIndexSSTableReader extends SSTableReader
     @VisibleForTesting
     public static final double fpChanceTolerance = Double.parseDouble(System.getProperty(Config.PROPERTY_PREFIX + "bloom_filter_fp_chance_tolerance", "0.000001"));
 
-    public TrieIndexSSTableReader(BTIReaderBuilder builder)
+    public BtiTableReader(BtiTableReaderBuilder builder)
     {
         super(builder);
         this.rowIndexFile = builder.getRowIndexFile();
@@ -105,22 +105,22 @@ public class TrieIndexSSTableReader extends SSTableReader
      * @param bf         Bloom filter for the replacement
      * @return the cloned reader. That reader is set as a replacement by the method.
      */
-    private TrieIndexSSTableReader cloneInternal(DecoratedKey first, OpenReason openReason, IFilter bf)
+    private BtiTableReader cloneInternal(DecoratedKey first, OpenReason openReason, IFilter bf)
     {
-        BTIReaderBuilder builder = new BTIReaderBuilder(descriptor).setComponents(components)
-                                                                   .setTableMetadataRef(metadata)
-                                                                   .setMaxDataAge(maxDataAge)
-                                                                   .setStatsMetadata(sstableMetadata)
-                                                                   .setOpenReason(openReason)
-                                                                   .setSerializationHeader(header)
-                                                                   .setDataFile(dfile != null ? dfile.sharedCopy() : null)
-                                                                   .setRowIndexFile(rowIndexFile != null ? rowIndexFile.sharedCopy() : null)
-                                                                   .setPartitionIndex(partitionIndex != null ? partitionIndex.sharedCopy() : null)
-                                                                   .setFilter(bf)
-                                                                   .setFirst(first)
-                                                                   .setLast(last)
-                                                                   .setSuspected(isSuspect.get())
-                                                                   .setOnline(true);
+        BtiTableReaderBuilder builder = new BtiTableReaderBuilder(descriptor).setComponents(components)
+                                                                             .setTableMetadataRef(metadata)
+                                                                             .setMaxDataAge(maxDataAge)
+                                                                             .setStatsMetadata(sstableMetadata)
+                                                                             .setOpenReason(openReason)
+                                                                             .setSerializationHeader(header)
+                                                                             .setDataFile(dfile != null ? dfile.sharedCopy() : null)
+                                                                             .setRowIndexFile(rowIndexFile != null ? rowIndexFile.sharedCopy() : null)
+                                                                             .setPartitionIndex(partitionIndex != null ? partitionIndex.sharedCopy() : null)
+                                                                             .setFilter(bf)
+                                                                             .setFirst(first)
+                                                                             .setLast(last)
+                                                                             .setSuspected(isSuspect.get())
+                                                                             .setOnline(true);
 
         return builder.build();
     }

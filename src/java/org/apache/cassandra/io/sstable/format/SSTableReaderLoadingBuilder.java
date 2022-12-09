@@ -32,7 +32,9 @@ import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.KeyReader;
 import org.apache.cassandra.io.sstable.SSTableBuilder;
 import org.apache.cassandra.io.sstable.format.big.IOOptions;
+import org.apache.cassandra.io.sstable.metadata.ValidationMetadata;
 import org.apache.cassandra.schema.Schema;
+import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.JVMStabilityInspector;
@@ -116,6 +118,24 @@ public abstract class SSTableReaderLoadingBuilder<R extends SSTableReader, B ext
     public abstract KeyReader buildKeyReader() throws IOException;
 
     protected abstract void openComponents(B builder, boolean validate, boolean online) throws IOException;
+
+    /**
+     * Check if sstable is created using same partitioner.
+     * Partitioner can be null, which indicates older version of sstable or no stats available.
+     * In that case, we skip the check.
+     */
+    protected void validatePartitioner(TableMetadata metadata, ValidationMetadata validationMetadata)
+    {
+        String partitionerName = metadata.partitioner.getClass().getCanonicalName();
+        if (validationMetadata != null && !partitionerName.equals(validationMetadata.partitioner))
+        {
+            throw new CorruptSSTableException(new IOException(String.format("Cannot open %s; partitioner %s does not match system partitioner %s. " +
+                                                                            "Note that the default partitioner starting with Cassandra 1.2 is Murmur3Partitioner, " +
+                                                                            "so you will need to edit that to match your old partitioner if upgrading.",
+                                                                            descriptor, validationMetadata.partitioner, partitionerName)),
+                                              descriptor.filenameFor(Component.STATS));
+        }
+    }
 
     private TableMetadataRef resolveTableMetadataRef()
     {

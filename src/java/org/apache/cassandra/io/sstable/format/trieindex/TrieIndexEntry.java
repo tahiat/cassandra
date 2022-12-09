@@ -138,7 +138,7 @@ public final class TrieIndexEntry extends AbstractRowIndexEntry
         return new TrieIndexEntry(dataFilePosition, indexTrieRoot, rowIndexCount, deletionTime);
     }
 
-    static class KeyCacheValueSerializer implements AbstractRowIndexEntry.KeyCacheValueSerializer<TrieIndexSSTableReader, TrieIndexEntry>
+    static class KeyCacheValueSerializer implements AbstractRowIndexEntry.KeyCacheValueSerializer<BtiTableReader, TrieIndexEntry>
     {
         private final static KeyCacheValueSerializer instance = new KeyCacheValueSerializer();
 
@@ -149,7 +149,7 @@ public final class TrieIndexEntry extends AbstractRowIndexEntry
         }
 
         @Override
-        public TrieIndexEntry deserialize(TrieIndexSSTableReader reader, DataInputPlus input) throws IOException
+        public TrieIndexEntry deserialize(BtiTableReader reader, DataInputPlus input) throws IOException
         {
             return deserializeForCache(input);
         }

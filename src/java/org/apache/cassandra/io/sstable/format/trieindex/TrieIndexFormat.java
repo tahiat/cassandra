@@ -55,7 +55,7 @@ import static org.apache.cassandra.io.sstable.format.SSTableReaderBuilder.defaul
 /**
  * Bigtable format with trie indices
  */
-public class TrieIndexFormat implements SSTableFormat<TrieIndexSSTableReader, BtiTableWriter>
+public class TrieIndexFormat implements SSTableFormat<BtiTableReader, BtiTableWriter>
 {
     private final static Set<Component> STREAMING_COMPONENTS = ImmutableSet.of(Component.DATA,
                                                                                Component.PARTITION_INDEX,
@@ -198,7 +198,7 @@ public class TrieIndexFormat implements SSTableFormat<TrieIndexSSTableReader, Bt
         }
     }
 
-    static class ReaderFactory implements SSTableReader.Factory<TrieIndexSSTableReader>
+    static class ReaderFactory implements SSTableReader.Factory<BtiTableReader>
     {
         @SuppressWarnings("IOResourceOpenedButNotSafelyClosed")
         @Override
@@ -234,7 +234,7 @@ public class TrieIndexFormat implements SSTableFormat<TrieIndexSSTableReader, Bt
         @Override
         public SSTableReader openForBatch(Descriptor descriptor, Set<Component> components, TableMetadataRef metadata)
         {
-            return TrieIndexSSTableReader.open(descriptor, Sets.difference(components, Collections.singleton(Component.FILTER)), metadata, true, true);
+            return BtiTableReader.open(descriptor, Sets.difference(components, Collections.singleton(Component.FILTER)), metadata, true, true);
         }
 
         @Override
@@ -259,7 +259,7 @@ public class TrieIndexFormat implements SSTableFormat<TrieIndexSSTableReader, Bt
         @Override
         public SSTableReader open(Descriptor desc, Set<Component> components, TableMetadataRef metadata, boolean validate, boolean isOffline)
         {
-            return TrieIndexSSTableReader.open(desc, components, metadata, validate, isOffline);
+            return BtiTableReader.open(desc, components, metadata, validate, isOffline);
         }
     }
 
