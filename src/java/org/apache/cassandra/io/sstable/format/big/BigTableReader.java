@@ -58,6 +58,8 @@ import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.IFilter;
 import org.apache.cassandra.utils.OutputHandler;
 
+import static org.apache.cassandra.utils.concurrent.SharedCloseable.sharedCopyOrNull;
+
 /**
  * SSTableReaders are open()ed by Keyspace.onStart; after that they are created by SSTableWriter.renameAndOpen.
  * Do not re-call open() on existing SSTable files; use the references kept by ColumnFamilyStore post-start instead.
@@ -115,8 +117,8 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
         if (indexEntry == null)
             return UnfilteredRowIterators.noRowsIterator(metadata(), key, Rows.EMPTY_STATIC_ROW, DeletionTime.LIVE, reversed);
         return reversed
-             ? new SSTableReversedIterator(this, file, key, indexEntry, slices, selectedColumns, ifile)
-             : new SSTableIterator(this, file, key, indexEntry, slices, selectedColumns, ifile);
+               ? new SSTableReversedIterator(this, file, key, indexEntry, slices, selectedColumns, ifile)
+               : new SSTableIterator(this, file, key, indexEntry, slices, selectedColumns, ifile);
     }
 
     @Override
@@ -205,9 +207,10 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
 
     /**
      * Retrieves the position while updating the key cache and the stats.
+     *
      * @param key The key to apply as the rhs to the given Operator. A 'fake' key is allowed to
-     * allow key selection by token bounds but only if op != * EQ
-     * @param op The Operator defining matching keys: the nearest key to the target matching the operator wins.
+     *            allow key selection by token bounds but only if op != * EQ
+     * @param op  The Operator defining matching keys: the nearest key to the target matching the operator wins.
      */
     public final RowIndexEntry getRowIndexEntry(PartitionPosition key, Operator op)
     {
@@ -215,18 +218,18 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
     }
 
     /**
-     * @param key The key to apply as the rhs to the given Operator. A 'fake' key is allowed to
-     * allow key selection by token bounds but only if op != * EQ
-     * @param op The Operator defining matching keys: the nearest key to the target matching the operator wins.
+     * @param key                 The key to apply as the rhs to the given Operator. A 'fake' key is allowed to
+     *                            allow key selection by token bounds but only if op != * EQ
+     * @param op                  The Operator defining matching keys: the nearest key to the target matching the operator wins.
      * @param updateCacheAndStats true if updating stats and cache
      * @return The index entry corresponding to the key, or null if the key is not present
      */
     @Override
     protected RowIndexEntry getRowIndexEntry(PartitionPosition key,
-                                                        Operator op,
-                                                        boolean updateCacheAndStats,
-                                                        boolean permitMatchPastLast,
-                                                        SSTableReadsListener listener)
+                                             Operator op,
+                                             boolean updateCacheAndStats,
+                                             boolean permitMatchPastLast,
+                                             SSTableReadsListener listener)
     {
         // Having no index file is impossible in a normal operation. The only way it might happen is running
         // Scrubber that does not really rely onto this method.
@@ -238,7 +241,7 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
         if (op == Operator.EQ)
         {
             assert key instanceof DecoratedKey; // EQ only make sense if the key is a valid row key
-            if (!bf.isPresent((DecoratedKey)key))
+            if (!bf.isPresent((DecoratedKey) key))
             {
                 listener.onSSTableSkipped(this, SkippingReason.BLOOM_FILTER);
                 Tracing.trace("Bloom filter allows skipping sstable {}", descriptor.id);
@@ -345,7 +348,7 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
                     if (exactMatch && updateCacheAndStats)
                     {
                         assert key instanceof DecoratedKey; // key can be == to the index key only if it's a true row key
-                        DecoratedKey decoratedKey = (DecoratedKey)key;
+                        DecoratedKey decoratedKey = (DecoratedKey) key;
 
                         if (logger.isTraceEnabled())
                         {
@@ -451,7 +454,6 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
         {
             throw new AssertionError("Failed to deserialize row index entry", e);
         }
-
     }
 
     /**
@@ -509,7 +511,7 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
     {
         ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(metadata().id);
         Preconditions.checkArgument(transaction.originals().contains(this));
-        return new Scrubber(cfs, transaction, options.skipCorrupted, outputHandler, options.checkData, options.reinsertOverflowedTTLRows);
+        return new BigTableScrubber(cfs, transaction, options.skipCorrupted, outputHandler, options.checkData, options.reinsertOverflowedTTLRows);
     }
 
     @Override
@@ -531,21 +533,11 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
         return indexSummary.getScanPositionFromBinarySearch(key);
     }
 
-    private BigTableReaderBuilder readerBuilderStub(IndexSummary indexSummary, IFilter filter)
+    private BigTableReaderBuilder unbuild()
     {
-        return new BigTableReaderBuilder(descriptor).setComponents(components)
-                                                    .setTableMetadataRef(metadata)
-                                                    .setIndexFile(ifile != null ? ifile.sharedCopy() : null)
-                                                    .setDataFile(dfile.sharedCopy())
-                                                    .setIndexSummary(indexSummary)
-                                                    .setFilter(filter)
-                                                    .setMaxDataAge(maxDataAge)
-                                                    .setStatsMetadata(sstableMetadata)
-                                                    .setOpenReason(openReason)
-                                                    .setSerializationHeader(header)
-                                                    .setFirst(first)
-                                                    .setLast(last)
-                                                    .setSuspected(isSuspect.get());
+        return super.unbuild(new BigTableReaderBuilder(descriptor))
+                    .setIndexFile(ifile)
+                    .setIndexSummary(indexSummary);
     }
 
     /**
@@ -558,7 +550,7 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
      */
     private SSTableReader cloneAndReplace(DecoratedKey newFirst, OpenReason reason)
     {
-        return cloneAndReplace(newFirst, reason, indexSummary.sharedCopy());
+        return cloneAndReplace(newFirst, reason, sharedCopyOrNull(indexSummary));
     }
 
     /**
@@ -572,11 +564,13 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
      */
     private BigTableReader cloneAndReplace(DecoratedKey newFirst, OpenReason reason, IndexSummary newSummary)
     {
-        BigTableReaderBuilder builder = readerBuilderStub(newSummary, bf != null ? bf.sharedCopy() : null).setIndexSummary(newSummary)
-                                                                                                          .setOpenReason(reason)
-                                                                                                          .setFirst(newFirst);
-
-        return builder.build(true, true);
+        return unbuild().setFilter(sharedCopyOrNull(bf))
+                        .setDataFile(sharedCopyOrNull(dfile))
+                        .setIndexFile(sharedCopyOrNull(ifile))
+                        .setIndexSummary(newSummary)
+                        .setFirst(newFirst)
+                        .setOpenReason(reason)
+                        .build(true, true);
     }
 
     /**
@@ -588,9 +582,11 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
     @VisibleForTesting
     public SSTableReader cloneAndReplace(IFilter newBloomFilter)
     {
-        BigTableReaderBuilder builder = readerBuilderStub(indexSummary != null ? indexSummary.sharedCopy() : null, newBloomFilter).setFilter(newBloomFilter);
-
-        return builder.build(true, true);
+        return unbuild().setDataFile(sharedCopyOrNull(dfile))
+                        .setIndexFile(sharedCopyOrNull(ifile))
+                        .setIndexSummary(sharedCopyOrNull(indexSummary))
+                        .setFilter(newBloomFilter)
+                        .build(true, true);
     }
 
     public SSTableReader cloneWithRestoredStart(DecoratedKey restoredStart)
@@ -688,5 +684,4 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
             FileUtils.closeQuietly(primaryIndex);
         }
     }
-
 }

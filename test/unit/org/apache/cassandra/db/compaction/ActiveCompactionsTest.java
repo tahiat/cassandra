@@ -200,7 +200,7 @@ public class ActiveCompactionsTest extends CQLTester
         try (LifecycleTransaction txn = getCurrentColumnFamilyStore().getTracker().tryModify(sstable, OperationType.SCRUB))
         {
             MockActiveCompactions mockActiveCompactions = new MockActiveCompactions();
-            CompactionManager.instance.scrubOne(getCurrentColumnFamilyStore(), txn, true, false, false, mockActiveCompactions);
+            CompactionManager.instance.scrubOne(txn, true, false, false, mockActiveCompactions);
 
             assertTrue(mockActiveCompactions.finished);
             assertEquals(mockActiveCompactions.holder.getCompactionInfo().getSSTables(), Sets.newHashSet(sstable));

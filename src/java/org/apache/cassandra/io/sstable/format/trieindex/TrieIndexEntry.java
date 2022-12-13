@@ -121,7 +121,7 @@ public final class TrieIndexEntry extends AbstractRowIndexEntry
      * Create an index entry. The row index trie must already have been written (by RowIndexWriter) to the row index
      * file and its root position must be specified in trieRoot.
      */
-    public static AbstractRowIndexEntry create(long dataStartPosition,
+    public static TrieIndexEntry create(long dataStartPosition,
                                         long trieRoot,
                                         DeletionTime partitionLevelDeletion,
                                         int rowIndexCount)
@@ -140,7 +140,7 @@ public final class TrieIndexEntry extends AbstractRowIndexEntry
 
     static class KeyCacheValueSerializer implements AbstractRowIndexEntry.KeyCacheValueSerializer<BtiTableReader, TrieIndexEntry>
     {
-        private final static KeyCacheValueSerializer instance = new KeyCacheValueSerializer();
+        public final static KeyCacheValueSerializer instance = new KeyCacheValueSerializer();
 
         @Override
         public void skip(DataInputPlus input) throws IOException

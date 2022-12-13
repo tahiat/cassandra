@@ -94,26 +94,29 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
 
             if (rebuildFilter || rebuildSummary)
             {
-                Pair<IFilter, IndexSummaryComponent> filterAndSummary = buildSummaryAndBloomFilter(indexFile, builder.getSerializationHeader(), rebuildFilter, rebuildSummary);
-                IFilter filter = filterAndSummary.left;
-                IndexSummaryComponent summaryComponent = filterAndSummary.right;
-
-                if (summaryComponent != null)
+                try (FileHandle indexFile = indexFileBuilder(builder.getIndexSummary()).complete())
                 {
-                    builder.setFirst(summaryComponent.first);
-                    builder.setLast(summaryComponent.last);
-                    builder.setIndexSummary(summaryComponent.indexSummary);
+                    Pair<IFilter, IndexSummaryComponent> filterAndSummary = buildSummaryAndBloomFilter(indexFile, builder.getSerializationHeader(), rebuildFilter, rebuildSummary);
+                    IFilter filter = filterAndSummary.left;
+                    IndexSummaryComponent summaryComponent = filterAndSummary.right;
 
-                    if (online)
-                        summaryComponent.save(descriptor);
-                }
+                    if (summaryComponent != null)
+                    {
+                        builder.setFirst(summaryComponent.first);
+                        builder.setLast(summaryComponent.last);
+                        builder.setIndexSummary(summaryComponent.indexSummary);
 
-                if (filter != null)
-                {
-                    builder.setFilter(filter);
+                        if (online)
+                            summaryComponent.save(descriptor);
+                    }
 
-                    if (online)
-                        FilterComponent.save(filter, descriptor);
+                    if (filter != null)
+                    {
+                        builder.setFilter(filter);
+
+                        if (online)
+                            FilterComponent.save(filter, descriptor);
+                    }
                 }
             }
 
@@ -158,7 +161,7 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
      *
      * @param rebuildFilter  true if Bloom filter should be rebuilt
      * @param rebuildSummary true if index summary, first and last keys should be rebuilt
-     * @return
+     * @return a pair of created filter and index summary component (or nulls if some of them were not created)
      */
     private Pair<IFilter, IndexSummaryComponent> buildSummaryAndBloomFilter(FileHandle indexFile,
                                                                             SerializationHeader serializationHeader,
@@ -242,16 +245,6 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
         }
 
         return summaryComponent;
-    }
-
-    private long calculateEstimatedKeys(StatsMetadata statsMetadata) throws IOException
-    {
-        checkNotNull(statsMetadata);
-
-        if (statsMetadata.totalRows > 0)
-            return statsMetadata.totalRows;
-        long histogramCount = statsMetadata.estimatedPartitionSize.count();
-        return histogramCount > 0 && !statsMetadata.estimatedPartitionSize.isOverflowed() ? histogramCount : estimateRowsFromIndex(indexFile);
     }
 
     /**

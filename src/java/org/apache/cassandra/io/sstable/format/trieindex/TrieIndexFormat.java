@@ -17,40 +17,25 @@
  */
 package org.apache.cassandra.io.sstable.format.trieindex;
 
-import java.io.IOException;
-import java.util.Collection;
-import java.util.Collections;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Set;
-import java.util.UUID;
 
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Sets;
 
-import org.apache.cassandra.db.SerializationHeader;
-import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
-import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
-import org.apache.cassandra.io.sstable.KeyReader;
-import org.apache.cassandra.io.sstable.SSTable;
-import org.apache.cassandra.io.sstable.format.SSTableFlushObserver;
+import org.apache.cassandra.io.sstable.GaugeProvider;
+import org.apache.cassandra.io.sstable.SSTableBuilder;
+import org.apache.cassandra.io.sstable.format.AbstractRowIndexEntry;
 import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.io.sstable.format.SSTableReaderBuilder;
+import org.apache.cassandra.io.sstable.format.SSTableReaderLoadingBuilder;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.io.sstable.format.Version;
-import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
-import org.apache.cassandra.io.sstable.metadata.MetadataType;
-import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
-import org.apache.cassandra.io.util.FileHandle;
 import org.apache.cassandra.net.MessagingService;
-import org.apache.cassandra.schema.Schema;
-import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.schema.TableMetadataRef;
-import org.apache.cassandra.utils.Throwables;
-
-import static org.apache.cassandra.db.Directories.SECONDARY_INDEX_NAME_SEPARATOR;
-import static org.apache.cassandra.io.sstable.format.SSTableReaderBuilder.defaultDataHandleBuilder;
-import static org.apache.cassandra.io.sstable.format.SSTableReaderBuilder.defaultIndexHandleBuilder;
 
 /**
  * Bigtable format with trie indices
@@ -122,13 +107,13 @@ public class TrieIndexFormat implements SSTableFormat<BtiTableReader, BtiTableWr
 
 
     @Override
-    public SSTableWriter.Factory getWriterFactory()
+    public SSTableWriter.Factory<BtiTableWriter, BtiTableWriterBuilder> getWriterFactory()
     {
         return writerFactory;
     }
 
     @Override
-    public SSTableReader.Factory getReaderFactory()
+    public SSTableReader.Factory<BtiTableReader, BtiTableReaderBuilder> getReaderFactory()
     {
         return readerFactory;
     }
@@ -169,8 +154,38 @@ public class TrieIndexFormat implements SSTableFormat<BtiTableReader, BtiTableWr
         return WRITE_COMPONENTS;
     }
 
-    static class WriterFactory extends SSTableWriter.Factory<BtiTableWriter, BTIWriterBuilder>
+    @Override
+    public AbstractRowIndexEntry.KeyCacheValueSerializer<?, ?> getKeyCacheValueSerializer()
     {
+        return TrieIndexEntry.KeyCacheValueSerializer.instance;
+    }
+
+    @Override
+    public BtiTableReader cast(SSTableReader sstr)
+    {
+        return (BtiTableReader) sstr;
+    }
+
+    @Override
+    public BtiTableWriter cast(SSTableWriter sstw)
+    {
+        return (BtiTableWriter) sstw;
+    }
+
+    @Override
+    public FormatSpecificMetricsProviders getFormatSpecificMetricsProviders()
+    {
+        return BtiTableSpecificMetricsProviders.instance;
+    }
+
+    static class WriterFactory implements SSTableWriter.Factory<BtiTableWriter, BtiTableWriterBuilder>
+    {
+        @Override
+        public BtiTableWriterBuilder builder(Descriptor descriptor)
+        {
+            return new BtiTableWriterBuilder(descriptor);
+        }
+
         @Override
         public long estimateSize(SSTableWriter.SSTableSizeParameters parameters)
         {
@@ -179,87 +194,21 @@ public class TrieIndexFormat implements SSTableFormat<BtiTableReader, BtiTableWr
                             + parameters.dataSize()) // data
                            * 1.2); // bloom filter and row index overhead
         }
-
-        @Override
-        public BtiTableWriter open(Descriptor descriptor,
-                                   long keyCount,
-                                   long repairedAt,
-                                   UUID pendingRepair,
-                                   boolean isTransient,
-                                   TableMetadataRef metadata,
-                                   MetadataCollector metadataCollector,
-                                   SerializationHeader header,
-                                   Collection<SSTableFlushObserver> observers,
-                                   LifecycleNewTracker lifecycleNewTracker,
-                                   Set<Component> indexComponents)
-        {
-            SSTable.validateRepairedMetadata(repairedAt, pendingRepair, isTransient);
-            return new BtiTableWriter(descriptor, keyCount, repairedAt, pendingRepair, isTransient, metadata, metadataCollector, header, observers, lifecycleNewTracker, indexComponents);
-        }
     }
 
-    static class ReaderFactory implements SSTableReader.Factory<BtiTableReader>
+    static class ReaderFactory implements SSTableReader.Factory<BtiTableReader, BtiTableReaderBuilder>
     {
-        @SuppressWarnings("IOResourceOpenedButNotSafelyClosed")
         @Override
-        public KeyReader openKeyReader(Descriptor desc, TableMetadata metadata, Set<Component> components)
+        public SSTableReaderBuilder<BtiTableReader, BtiTableReaderBuilder> builder(Descriptor descriptor)
         {
-            IPartitioner partitioner = metadata.partitioner;
-            boolean compressedData = desc.fileFor(Component.COMPRESSION_INFO).exists();
-            try
-            {
-                @SuppressWarnings("unused")
-                StatsMetadata stats = (StatsMetadata) desc.getMetadataSerializer().deserialize(desc, MetadataType.STATS);
-
-                try (FileHandle.Builder piBuilder = defaultIndexHandleBuilder(desc, Component.PARTITION_INDEX);
-                     FileHandle.Builder riBuilder = defaultIndexHandleBuilder(desc, Component.ROW_INDEX);
-                     FileHandle.Builder dBuilder = defaultDataHandleBuilder(desc).compressed(compressedData);
-                     PartitionIndex index = PartitionIndex.load(piBuilder, partitioner, false);
-                     FileHandle dFile = dBuilder.complete();
-                     FileHandle riFile = riBuilder.complete())
-                {
-                    return new PartitionIterator(index.sharedCopy(),
-                                                 partitioner,
-                                                 riFile.sharedCopy(),
-                                                 dFile.sharedCopy())
-                           .closeHandles();
-                }
-            }
-            catch (IOException e)
-            {
-                throw Throwables.cleaned(e);
-            }
+            return new BtiTableReaderBuilder(descriptor);
         }
 
         @Override
-        public SSTableReader openForBatch(Descriptor descriptor, Set<Component> components, TableMetadataRef metadata)
+        public SSTableReaderLoadingBuilder<BtiTableReader, BtiTableReaderBuilder> builder(Descriptor descriptor, TableMetadataRef tableMetadataRef, Set<Component> components)
         {
-            return BtiTableReader.open(descriptor, Sets.difference(components, Collections.singleton(Component.FILTER)), metadata, true, true);
-        }
-
-        @Override
-        public SSTableReader open(Descriptor descriptor)
-        {
-            TableMetadataRef metadata;
-            if (descriptor.cfname.contains(SECONDARY_INDEX_NAME_SEPARATOR))
-            {
-                int i = descriptor.cfname.indexOf(SECONDARY_INDEX_NAME_SEPARATOR);
-                String indexName = descriptor.cfname.substring(i + 1);
-                metadata = Schema.instance.getIndexTableMetadataRef(descriptor.ksname, indexName);
-                if (metadata == null)
-                    throw new AssertionError("Could not find index metadata for index cf " + i);
-            }
-            else
-            {
-                metadata = Schema.instance.getTableMetadataRef(descriptor.ksname, descriptor.cfname);
-            }
-            return open(descriptor, metadata);
-        }
-
-        @Override
-        public SSTableReader open(Descriptor desc, Set<Component> components, TableMetadataRef metadata, boolean validate, boolean isOffline)
-        {
-            return BtiTableReader.open(desc, components, metadata, validate, isOffline);
+            return new BtiTableReaderLoadingBuilder(new SSTableBuilder<>(descriptor).setTableMetadataRef(tableMetadataRef)
+                                                                                    .setComponents(components));
         }
     }
 
@@ -427,6 +376,19 @@ public class TrieIndexFormat implements SSTableFormat<BtiTableReader, BtiTableWr
         public boolean hasIsTransient()
         {
             return version.compareTo("ca") >= 0;
+        }
+    }
+
+    private static class BtiTableSpecificMetricsProviders implements FormatSpecificMetricsProviders
+    {
+        private final static BtiTableSpecificMetricsProviders instance = new BtiTableSpecificMetricsProviders();
+
+        private final List<GaugeProvider<?, ?>> gaugeProviders = Arrays.asList();
+
+        @Override
+        public List<GaugeProvider<?, ?>> getGaugeProviders()
+        {
+            return gaugeProviders;
         }
     }
 }

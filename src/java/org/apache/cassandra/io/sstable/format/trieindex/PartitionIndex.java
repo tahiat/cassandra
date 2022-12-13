@@ -43,6 +43,7 @@ import org.apache.cassandra.utils.PageAware;
 import org.apache.cassandra.utils.SizedInts;
 import org.apache.cassandra.utils.bytecomparable.ByteSource;
 import org.apache.cassandra.utils.concurrent.Ref;
+import org.apache.cassandra.utils.concurrent.SharedCloseable;
 
 /**
  * This class holds the partition index as an on-disk trie mapping unique prefixes of decorated keys to:
@@ -61,7 +62,7 @@ import org.apache.cassandra.utils.concurrent.Ref;
  *
  * Not to be used outside of package. Public only so that it can be used by tools (IndexAnalyzer and IndexRewriter).
  */
-public class PartitionIndex implements Closeable
+public class PartitionIndex implements SharedCloseable
 {
     private static final Logger logger = LoggerFactory.getLogger(PartitionIndex.class);
 
@@ -155,11 +156,13 @@ public class PartitionIndex implements Closeable
         return last;
     }
 
+    @Override
     public PartitionIndex sharedCopy()
     {
         return new PartitionIndex(this);
     }
 
+    @Override
     public void addTo(Ref.IdentityCollection identities)
     {
         fh.addTo(identities);
@@ -205,6 +208,12 @@ public class PartitionIndex implements Closeable
     public void close()
     {
         fh.close();
+    }
+
+    @Override
+    public Throwable close(Throwable accumulate)
+    {
+        return fh.close(accumulate);
     }
 
     public Reader openReader()

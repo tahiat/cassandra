@@ -54,10 +54,10 @@ import org.apache.cassandra.utils.memory.HeapCloner;
 
 import static org.apache.cassandra.utils.TimeUUID.Generator.nextTimeUUID;
 
-public class Scrubber implements IScrubber
+public class BigTableScrubber implements IScrubber
 {
     private final ColumnFamilyStore cfs;
-    private final SSTableReader sstable;
+    private final BigTableReader sstable;
     private final LifecycleTransaction transaction;
     private final File destination;
     private final boolean skipCorrupted;
@@ -91,16 +91,18 @@ public class Scrubber implements IScrubber
     private final SortedSet<Partition> outOfOrder = new TreeSet<>(partitionComparator);
 
     @SuppressWarnings("resource")
-    public Scrubber(ColumnFamilyStore cfs,
-                    LifecycleTransaction transaction,
-                    boolean skipCorrupted,
-                    OutputHandler outputHandler,
-                    boolean checkData,
-                    boolean reinsertOverflowedTTLRows)
+    public BigTableScrubber(ColumnFamilyStore cfs,
+                            LifecycleTransaction transaction,
+                            boolean skipCorrupted,
+                            OutputHandler outputHandler,
+                            boolean checkData,
+                            boolean reinsertOverflowedTTLRows)
     {
+        this.sstable = (BigTableReader) transaction.onlyOne();
+        assert sstable.metadata().keyspace.equals(cfs.keyspace.getName()) && sstable.metadata().name.equals(cfs.name);
+
         this.cfs = cfs;
         this.transaction = transaction;
-        this.sstable = transaction.onlyOne();
         this.outputHandler = outputHandler;
         this.skipCorrupted = skipCorrupted;
         this.reinsertOverflowedTTLRows = reinsertOverflowedTTLRows;

@@ -19,13 +19,11 @@
 package org.apache.cassandra.io.sstable.format.trieindex;
 
 import java.io.IOException;
-import java.util.Collection;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ClusteringComparator;
 import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.db.rows.Unfiltered;
-import org.apache.cassandra.io.sstable.format.SSTableFlushObserver;
 import org.apache.cassandra.io.sstable.format.SortedTablePartitionWriter;
 import org.apache.cassandra.io.sstable.format.Version;
 import org.apache.cassandra.io.sstable.format.trieindex.RowIndexReader.IndexInfo;
@@ -46,25 +44,24 @@ class BtiFormatPartitionWriter extends SortedTablePartitionWriter
 
     BtiFormatPartitionWriter(SerializationHeader header,
                              ClusteringComparator comparator,
-                             SequentialWriter writer,
-                             SequentialWriter indexWriter,
-                             Version version,
-                             Collection<SSTableFlushObserver> observers)
+                             SequentialWriter dataWriter,
+                             SequentialWriter rowIndexWriter,
+                             Version version)
     {
-        this(header, comparator, writer, indexWriter, version, observers, DatabaseDescriptor.getColumnIndexSize());
+        this(header, comparator, dataWriter, rowIndexWriter, version, DatabaseDescriptor.getColumnIndexSize());
     }
+
 
     BtiFormatPartitionWriter(SerializationHeader header,
                              ClusteringComparator comparator,
-                             SequentialWriter writer,
-                             SequentialWriter indexWriter,
+                             SequentialWriter dataWriter,
+                             SequentialWriter rowIndexWriter,
                              Version version,
-                             Collection<SSTableFlushObserver> observers,
                              int indexSize)
     {
-        super(header, writer, version, observers);
+        super(header, dataWriter, version);
         this.indexSize = indexSize;
-        this.rowTrie = new RowIndexWriter(comparator, indexWriter);
+        this.rowTrie = new RowIndexWriter(comparator, rowIndexWriter);
     }
 
     @Override
@@ -76,9 +73,9 @@ class BtiFormatPartitionWriter extends SortedTablePartitionWriter
     }
 
     @Override
-    public void add(Unfiltered unfiltered) throws IOException
+    public void addUnfiltered(Unfiltered unfiltered) throws IOException
     {
-        super.add(unfiltered);
+        super.addUnfiltered(unfiltered);
 
         // if we hit the column index size that we have to index after, go ahead and index it.
         if (currentPosition() - startPosition >= indexSize)
@@ -118,5 +115,10 @@ class BtiFormatPartitionWriter extends SortedTablePartitionWriter
         rowTrie.add(firstClustering, lastClustering, cIndexInfo);
         firstClustering = null;
         ++rowIndexCount;
+    }
+
+    public int getRowIndexCount()
+    {
+        return rowIndexCount;
     }
 }

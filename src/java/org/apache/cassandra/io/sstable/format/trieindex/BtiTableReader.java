@@ -27,6 +27,7 @@ import java.util.Iterator;
 import java.util.List;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,6 +76,7 @@ import org.apache.cassandra.utils.OutputHandler;
 import static org.apache.cassandra.io.sstable.format.SSTableReader.Operator.EQ;
 import static org.apache.cassandra.io.sstable.format.SSTableReader.Operator.GE;
 import static org.apache.cassandra.io.sstable.format.SSTableReader.Operator.GT;
+import static org.apache.cassandra.utils.concurrent.SharedCloseable.sharedCopyOrNull;
 
 /**
  * SSTableReaders are open()ed by Keyspace.onStart; after that they are created by SSTableWriter.renameAndOpen.
@@ -84,8 +86,8 @@ public class BtiTableReader extends SSTableReader
 {
     private static final Logger logger = LoggerFactory.getLogger(BtiTableReader.class);
 
-    protected FileHandle rowIndexFile;
-    protected PartitionIndex partitionIndex;
+    private final FileHandle rowIndexFile;
+    private final PartitionIndex partitionIndex;
 
     @VisibleForTesting
     public static final double fpChanceTolerance = Double.parseDouble(System.getProperty(Config.PROPERTY_PREFIX + "bloom_filter_fp_chance_tolerance", "0.000001"));
@@ -95,6 +97,13 @@ public class BtiTableReader extends SSTableReader
         super(builder);
         this.rowIndexFile = builder.getRowIndexFile();
         this.partitionIndex = builder.getPartitionIndex();
+    }
+
+    private BtiTableReaderBuilder unbuild()
+    {
+        return super.unbuild(new BtiTableReaderBuilder(descriptor))
+                    .setRowIndexFile(rowIndexFile)
+                    .setPartitionIndex(partitionIndex);
     }
 
     /**
@@ -107,22 +116,13 @@ public class BtiTableReader extends SSTableReader
      */
     private BtiTableReader cloneInternal(DecoratedKey first, OpenReason openReason, IFilter bf)
     {
-        BtiTableReaderBuilder builder = new BtiTableReaderBuilder(descriptor).setComponents(components)
-                                                                             .setTableMetadataRef(metadata)
-                                                                             .setMaxDataAge(maxDataAge)
-                                                                             .setStatsMetadata(sstableMetadata)
-                                                                             .setOpenReason(openReason)
-                                                                             .setSerializationHeader(header)
-                                                                             .setDataFile(dfile != null ? dfile.sharedCopy() : null)
-                                                                             .setRowIndexFile(rowIndexFile != null ? rowIndexFile.sharedCopy() : null)
-                                                                             .setPartitionIndex(partitionIndex != null ? partitionIndex.sharedCopy() : null)
-                                                                             .setFilter(bf)
-                                                                             .setFirst(first)
-                                                                             .setLast(last)
-                                                                             .setSuspected(isSuspect.get())
-                                                                             .setOnline(true);
-
-        return builder.build();
+        return unbuild().setOpenReason(openReason)
+                        .setFilter(bf)
+                        .setFirst(first)
+                        .setDataFile(sharedCopyOrNull(dfile))
+                        .setRowIndexFile(sharedCopyOrNull(rowIndexFile))
+                        .setPartitionIndex(sharedCopyOrNull(partitionIndex))
+                        .build(true, true);
     }
 
     @Override
@@ -320,6 +320,11 @@ public class BtiTableReader extends SSTableReader
     public PartitionIterator coveredKeysIterator(AbstractBounds<PartitionPosition> bounds) throws IOException
     {
         return new KeysRange(bounds).iterator();
+    }
+
+    public ScrubPartitionIterator scrubPartitionsIterator() throws IOException
+    {
+        return new ScrubIterator(partitionIndex, rowIndexFile);
     }
 
     private final class KeysRange
@@ -653,12 +658,15 @@ public class BtiTableReader extends SSTableReader
     @Override
     public IScrubber getScrubber(OutputHandler outputHandler, LifecycleTransaction transaction, IScrubber.Options options)
     {
-        return null; // TODO
+        ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(metadata().id);
+        Preconditions.checkArgument(transaction.originals().contains(this));
+        return new BtiTableScrubber(cfs, transaction, outputHandler, options);
     }
 
     @Override
     public IVerifier getVerifier(OutputHandler outputHandler, boolean isOffline, IVerifier.Options options)
     {
-        return null; // TODO
+        ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(metadata().id);
+        return new BtiTableVerifier(cfs, this, isOffline, options);
     }
 }

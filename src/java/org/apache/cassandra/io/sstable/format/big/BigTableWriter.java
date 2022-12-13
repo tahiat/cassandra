@@ -31,7 +31,6 @@ import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DeletionTime;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.io.FSWriteError;
-import org.apache.cassandra.io.compress.CompressedSequentialWriter;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Downsampling;
 import org.apache.cassandra.io.sstable.IndexSummary;
@@ -114,13 +113,11 @@ public class BigTableWriter extends SortedTableWriter<BigFormatPartitionWriter, 
     {
         assert boundary == null || (boundary.indexLength > 0 && boundary.dataLength > 0);
 
-        BigTableReaderBuilder builder = new BigTableReaderBuilder(descriptor).setComponents(components)
-                                                                             .setTableMetadataRef(metadata)
-                                                                             .setMaxDataAge(maxDataAge)
-                                                                             .setSerializationHeader(header)
-                                                                             .setOpenReason(openReason)
-                                                                             .setFirst(first)
-                                                                             .setLast(boundary != null ? boundary.lastKey : last);
+        BigTableReaderBuilder builder = unbuildTo(new BigTableReaderBuilder(descriptor)).setMaxDataAge(maxDataAge)
+                                                                                        .setSerializationHeader(header)
+                                                                                        .setOpenReason(openReason)
+                                                                                        .setFirst(first)
+                                                                                        .setLast(boundary != null ? boundary.lastKey : last);
 
         try
         {
@@ -147,17 +144,8 @@ public class BigTableWriter extends SortedTableWriter<BigFormatPartitionWriter, 
                                                    .withLengthOverride(boundary != null ? boundary.indexLength : -1)
                                                    .complete();
             builder.setIndexFile(indexFile);
-
-            int dataBufferSize = ioOptions.diskOptimizationStrategy.bufferSize(partitionSizeHistogram.percentile(ioOptions.diskOptimizationEstimatePercentile));
-            FileHandle.Builder dataFileBuilder = new FileHandle.Builder(descriptor.fileFor(Component.DATA));
-            FileHandle dataFile = dataFileBuilder.mmapped(ioOptions.defaultDiskAccessMode == Config.DiskAccessMode.mmap)
-                                                 .withChunkCache(chunkCache)
-                                                 .withCompressionMetadata(compression ? ((CompressedSequentialWriter) dataWriter).open(boundary != null ? boundary.dataLength : 0) : null)
-                                                 .bufferSize(dataBufferSize)
-                                                 .withLengthOverride(boundary != null ? boundary.dataLength : -1)
-                                                 .complete();
+            FileHandle dataFile = openDataFile(boundary != null ? boundary.dataLength : -1, builder.getStatsMetadata());
             builder.setDataFile(dataFile);
-            invalidateCacheAtBoundary(dataFile);
 
             return builder.build(true, true);
         }
@@ -178,16 +166,6 @@ public class BigTableWriter extends SortedTableWriter<BigFormatPartitionWriter, 
             return;
 
         doWhenReady.accept(openInternal(boundary, SSTableReader.OpenReason.EARLY));
-    }
-
-    private void invalidateCacheAtBoundary(FileHandle dfile)
-    {
-        if (chunkCache != null)
-        {
-            if (lastEarlyOpenLength != 0 && dfile.dataLength() > lastEarlyOpenLength)
-                chunkCache.invalidatePosition(dfile, lastEarlyOpenLength);
-        }
-        lastEarlyOpenLength = dfile.dataLength();
     }
 
     @Override

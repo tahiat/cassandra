@@ -50,6 +50,7 @@ import org.apache.cassandra.schema.ColumnMetadata;
 import org.apache.cassandra.schema.SchemaConstants;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.Throwables;
 import org.apache.cassandra.utils.TimeUUID;
 import org.apache.cassandra.utils.concurrent.Transactional;
 
@@ -157,6 +158,7 @@ public abstract class SSTableWriter extends SSTable implements Transactional
      */
     public SSTableReader finished()
     {
+        txnProxy.finalReaderAccessed = true;
         return txnProxy.finalReader;
     }
 
@@ -249,9 +251,11 @@ public abstract class SSTableWriter extends SSTable implements Transactional
     protected class TransactionalProxy extends AbstractTransactional
     {
         // should be set during doPrepare()
-        protected SSTableReader finalReader;
-        protected boolean openResult;
         private final Supplier<ImmutableList<Transactional>> transactionals;
+
+        private SSTableReader finalReader;
+        private boolean openResult;
+        private boolean finalReaderAccessed;
 
         public TransactionalProxy(Supplier<ImmutableList<Transactional>> transactionals)
         {
@@ -283,6 +287,13 @@ public abstract class SSTableWriter extends SSTable implements Transactional
         {
             for (Transactional t : transactionals.get())
                 accumulate = t.abort(accumulate);
+
+            if (!finalReaderAccessed && finalReader != null)
+            {
+                accumulate = Throwables.perform(accumulate, () -> finalReader.selfRef().release());
+                finalReader = null;
+                finalReaderAccessed = false;
+            }
 
             return accumulate;
         }

@@ -38,7 +38,7 @@ import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.io.util.FileHandle;
 
 /**
- *  A Cell Iterator in reversed clustering order over SSTable
+ * A Cell Iterator in reversed clustering order over SSTable
  */
 class SSTableReversedIterator extends AbstractSSTableIterator<TrieIndexEntry>
 {
@@ -61,8 +61,8 @@ class SSTableReversedIterator extends AbstractSSTableIterator<TrieIndexEntry>
     protected Reader createReaderInternal(TrieIndexEntry indexEntry, FileDataInput file, boolean shouldCloseFile)
     {
         return indexEntry.isIndexed()
-             ? new ReverseIndexedReader(indexEntry, file, shouldCloseFile)
-             : new ReverseReader(file, shouldCloseFile);
+               ? new ReverseIndexedReader(indexEntry, file, shouldCloseFile)
+               : new ReverseReader(file, shouldCloseFile);
     }
 
     public boolean isReverseOrder()
@@ -86,14 +86,14 @@ class SSTableReversedIterator extends AbstractSSTableIterator<TrieIndexEntry>
      * Reverse iteration is performed by going through an index block (or the whole partition if not indexed) forwards
      * and storing the positions of each entry that falls within the slice in a stack. Reverse iteration then pops out
      * positions and reads the entries.
-     *
+     * <p>
      * Note: The earlier version of this was constructing an in-memory view of the block instead, which gives better
      * performance on bigger queries and index blocks (due to not having to read disk again). With the lower
      * granularity of the tries it makes better sense to store as little as possible as the beginning of the block
      * should very rarely be in other page/chunk cache locations. This has the benefit of being able to answer small
      * queries (esp. LIMIT 1) faster and with less GC churn.
      */
-    private class ReverseReader extends RowReader
+    private class ReverseReader extends AbstractReader
     {
         LongStack rowOffsets = new LongStack();
         RangeTombstoneMarker blockOpenMarker, blockCloseMarker;
@@ -193,7 +193,7 @@ class SSTableReversedIterator extends AbstractSSTableIterator<TrieIndexEntry>
                     if (deserializer.nextIsRow())
                         deserializer.skipNext();
                     else
-                        updateOpenMarker((RangeTombstoneMarker)deserializer.readNext());
+                        updateOpenMarker((RangeTombstoneMarker) deserializer.readNext());
 
                     currentPosition = file.getFilePointer();
                     foundLessThan = true;
@@ -216,7 +216,7 @@ class SSTableReversedIterator extends AbstractSSTableIterator<TrieIndexEntry>
                 if (deserializer.nextIsRow())
                     deserializer.skipNext();
                 else
-                    updateOpenMarker((RangeTombstoneMarker)deserializer.readNext());
+                    updateOpenMarker((RangeTombstoneMarker) deserializer.readNext());
 
                 currentPosition = file.getFilePointer();
             }

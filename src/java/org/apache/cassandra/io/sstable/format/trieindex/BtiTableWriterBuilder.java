@@ -65,13 +65,12 @@ public class BtiTableWriterBuilder extends SortedTableWriterBuilder<TrieIndexEnt
                                                    lifecycleNewTracker.opType(),
                                                    getIOOptions().flushCompression);
 
-            indexWriter = new BtiTableWriter.IndexWriter(getTableMetadataRef().getLocal());
+            indexWriter = new BtiTableWriter.IndexWriter(this);
             partitionWriter = new BtiFormatPartitionWriter(getSerializationHeader(),
                                                            getTableMetadataRef().getLocal().comparator,
                                                            dataWriter,
-                                                           indexWriter.rowIndexFile,
-                                                           descriptor.version,
-                                                           getFlushObservers());
+                                                           indexWriter.rowIndexWriter,
+                                                           descriptor.version);
 
 
             return new BtiTableWriter(this, lifecycleNewTracker);

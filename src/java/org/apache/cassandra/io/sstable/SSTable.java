@@ -56,11 +56,11 @@ import static org.apache.cassandra.service.ActiveRepairService.UNREPAIRED_SSTABL
  * data on disk in sorted fashion. However the sorting is upto
  * the application. This class expects keys to be handed to it
  * in sorted order.
- *
+ * <p>
  * A separate index file is maintained as well, containing the
  * SSTable keys and the offset into the SSTable at which they are found.
  * Every 1/indexInterval key is read into memory when the SSTable is opened.
- *
+ * <p>
  * Finally, a bloom filter file is also kept for the keys in each SSTable.
  */
 public abstract class SSTable
@@ -150,7 +150,7 @@ public abstract class SSTable
      * to run for each such file because of the semantics of the JVM gc.  So,
      * we write a marker to `compactedFilename` when a file is compacted;
      * if such a marker exists on startup, the file should be removed.
-     *
+     * <p>
      * This method will also remove SSTables that are marked as temporary.
      *
      * @return true if the file was deleted
@@ -222,6 +222,14 @@ public abstract class SSTable
         for (Component component : components)
             ret.add(descriptor.filenameFor(component));
         return ret;
+    }
+
+    protected <B extends SSTableBuilder<?, B>> B unbuildTo(B builder)
+    {
+        return builder.setTableMetadataRef(metadata)
+                      .setComponents(components)
+                      .setChunkCache(chunkCache)
+                      .setIOOptions(ioOptions);
     }
 
     /**
@@ -321,6 +329,5 @@ public abstract class SSTable
                                     "pendingRepair cannot be set on a repaired sstable");
         Preconditions.checkArgument(!isTransient || (pendingRepair != NO_PENDING_REPAIR),
                                     "isTransient can only be true for sstables pending repair");
-
     }
 }

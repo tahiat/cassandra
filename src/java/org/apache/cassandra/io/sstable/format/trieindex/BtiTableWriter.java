@@ -19,29 +19,33 @@ package org.apache.cassandra.io.sstable.format.trieindex;
 
 import java.io.IOException;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DeletionTime;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.io.FSReadError;
 import org.apache.cassandra.io.FSWriteError;
-import org.apache.cassandra.io.compress.CompressedSequentialWriter;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.IndexComponent;
 import org.apache.cassandra.io.sstable.format.AbstractRowIndexEntry;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.io.sstable.format.SSTableReader.OpenReason;
 import org.apache.cassandra.io.sstable.format.SortedTableWriter;
 import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.io.util.DataPosition;
 import org.apache.cassandra.io.util.FileHandle;
 import org.apache.cassandra.io.util.SequentialWriter;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.IFilter;
+import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.Throwables;
+import org.apache.cassandra.utils.concurrent.Transactional;
 
 @VisibleForTesting
 public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter, TrieIndexEntry>
@@ -50,16 +54,12 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter, 
 
     private final BtiFormatPartitionWriter partitionWriter;
     private final IndexWriter iwriter;
-    private final TransactionalProxy txnProxy;
 
     public BtiTableWriter(BtiTableWriterBuilder builder, LifecycleNewTracker lifecycleNewTracker)
     {
         super(builder, lifecycleNewTracker);
-        this.dataWriter = builder.getDataWriter();
         this.iwriter = builder.getIndexWriter();
         this.partitionWriter = builder.getPartitionWriter();
-
-        txnProxy = new TransactionalProxy();
     }
 
     @Override
@@ -80,35 +80,58 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter, 
     protected TrieIndexEntry createRowIndexEntry(DecoratedKey key, DeletionTime partitionLevelDeletion, long finishResult) throws IOException
     {
         TrieIndexEntry entry = TrieIndexEntry.create(partitionWriter.getInitialPosition(),
-                                                     trieRoot,
+                                                     finishResult,
                                                      partitionLevelDeletion,
-                                                     partitionWriter.rowIndexCount);
+                                                     partitionWriter.getRowIndexCount());
         iwriter.append(key, entry);
         return entry;
     }
 
+    private BtiTableReader openInternal(OpenReason openReason, Supplier<PartitionIndex> partitionIndexSupplier)
+    {
+        PartitionIndex partitionIndex = null;
+        FileHandle rowIndexFile = null;
+        FileHandle dataFile = null;
+        IFilter filter = null;
+        StatsMetadata stats = statsMetadata();
+
+        try
+        {
+            partitionIndex = partitionIndexSupplier.get();
+            rowIndexFile = iwriter.rowIndexFHBuilder.complete();
+            dataFile = openDataFile(dataWriter.getLastFlushOffset(), stats);
+            filter = iwriter.getFilterCopy();
+
+            BtiTableReaderBuilder builder = unbuildTo(new BtiTableReaderBuilder(descriptor));
+            return builder.setOpenReason(openReason)
+                          .setMaxDataAge(maxDataAge)
+                          .setSerializationHeader(header)
+                          .setStatsMetadata(stats)
+                          .setPartitionIndex(partitionIndex)
+                          .setRowIndexFile(rowIndexFile)
+                          .setDataFile(dataFile)
+                          .setFilter(filter)
+                          .setFirst(first)
+                          .setLast(last)
+                          .build(true, true);
+        }
+        catch (RuntimeException | Error ex)
+        {
+            JVMStabilityInspector.inspectThrowable(ex);
+            Throwables.closeAndAddSuppressed(ex, filter, dataFile, rowIndexFile, partitionIndex);
+            throw ex;
+        }
+    }
+
+
     public void openEarly(Consumer<SSTableReader> callWhenReady)
     {
         long dataLength = dataWriter.position();
-
-        return iwriter.buildPartial(dataLength, partitionIndex ->
+        iwriter.buildPartial(dataLength, partitionIndex ->
         {
-            StatsMetadata stats = statsMetadata();
-            FileHandle ifile = iwriter.rowIndexFHBuilder.complete(iwriter.rowIndexFile.getLastFlushOffset());
-            if (compression)
-                dbuilder.withCompressionMetadata(((CompressedSequentialWriter) dataWriter).open(dataWriter.getLastFlushOffset()));
-            int dataBufferSize = ioOptions.diskOptimizationStrategy.bufferSize(stats.estimatedPartitionSize.percentile(DatabaseDescriptor.getDiskOptimizationEstimatePercentile()));
-            FileHandle dfile = dbuilder.bufferSize(dataBufferSize).complete(dataWriter.getLastFlushOffset());
-            invalidateCacheAtBoundary(dfile);
-            SSTableReader sstable = BtiTableReader.internalOpen(descriptor,
-                                                                components, metadata,
-                                                                ifile, dfile, partitionIndex, iwriter.bf.sharedCopy(),
-                                                                maxDataAge, stats, SSTableReader.OpenReason.EARLY, header);
-
-            sstable.first = getMinimalKey(partitionIndex.firstKey());
-            sstable.last = getMinimalKey(partitionIndex.lastKey());
-            sstable.setup(true);
-            callWhenReady.accept(sstable);
+            iwriter.rowIndexFHBuilder.withLengthOverride(iwriter.rowIndexWriter.getLastFlushOffset());
+            BtiTableReader reader = openInternal(OpenReason.EARLY, () -> partitionIndex);
+            callWhenReady.accept(reader);
         });
     }
 
@@ -118,66 +141,33 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter, 
         iwriter.complete(); // This will be called by completedPartitionIndex() below too, but we want it done now to
         // ensure outstanding openEarly actions are not triggered.
         dataWriter.sync();
-        iwriter.rowIndexFile.sync();
+        iwriter.rowIndexWriter.sync();
         // Note: Nothing must be written to any of the files after this point, as the chunk cache could pick up and
         // retain a partially-written page (see DB-2446).
 
-        return openFinal(SSTableReader.OpenReason.EARLY);
+        return openFinal(OpenReason.EARLY);
     }
 
     @SuppressWarnings("resource")
-    protected SSTableReader openFinal(SSTableReader.OpenReason openReason)
+    protected SSTableReader openFinal(OpenReason openReason)
     {
+
         if (maxDataAge < 0)
             maxDataAge = System.currentTimeMillis();
 
-        StatsMetadata stats = statsMetadata();
-        // finalize in-memory state for the reader
-        PartitionIndex partitionIndex = iwriter.completedPartitionIndex();
-        FileHandle rowIndexFile = iwriter.rowIndexFHBuilder.complete();
-        int dataBufferSize = ioOptions.diskOptimizationStrategy.bufferSize(stats.estimatedPartitionSize.percentile(DatabaseDescriptor.getDiskOptimizationEstimatePercentile()));
-        if (compression)
-            dbuilder.withCompressionMetadata(((CompressedSequentialWriter) dataWriter).open(dataWriter.getLastFlushOffset()));
-        FileHandle dfile = dbuilder.bufferSize(dataBufferSize).complete();
-        invalidateCacheAtBoundary(dfile);
-        SSTableReader sstable = BtiTableReader.internalOpen(descriptor,
-                                                            components,
-                                                            this.metadata,
-                                                            rowIndexFile,
-                                                            dfile,
-                                                            partitionIndex,
-                                                            iwriter.bf.sharedCopy(),
-                                                            maxDataAge,
-                                                            stats,
-                                                            openReason,
-                                                            header);
-        sstable.first = getMinimalKey(first);
-        sstable.last = getMinimalKey(last);
-        sstable.setup(true);
-        return sstable;
+        return openInternal(openReason, iwriter::completedPartitionIndex);
     }
 
-    protected SortedTableWriter.TransactionalProxy txnProxy()
+    protected TransactionalProxy txnProxy()
     {
-        return txnProxy;
+        return new TransactionalProxy(() -> ImmutableList.of(iwriter, dataWriter));
     }
 
-    class TransactionalProxy extends SortedTableWriter.TransactionalProxy
+    private class TransactionalProxy extends SortedTableWriter<BtiFormatPartitionWriter, TrieIndexEntry>.TransactionalProxy
     {
-        // finalise our state on disk, including renaming
-        @Override
-        protected void doPrepare()
+        public TransactionalProxy(Supplier<ImmutableList<Transactional>> transactionals)
         {
-            iwriter.prepareToCommit();
-            super.doPrepare();
-        }
-
-        @Override
-        protected Throwable doCommit(Throwable accumulate)
-        {
-            accumulate = super.doCommit(accumulate);
-            accumulate = iwriter.commit(accumulate);
-            return accumulate;
+            super(transactionals);
         }
 
         @Override
@@ -187,14 +177,6 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter, 
             accumulate = super.doPostCleanup(accumulate);
             return accumulate;
         }
-
-        @Override
-        protected Throwable doAbort(Throwable accumulate)
-        {
-            accumulate = iwriter.abort(accumulate);
-            accumulate = super.doAbort(accumulate);
-            return accumulate;
-        }
     }
 
     /**
@@ -202,9 +184,9 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter, 
      */
     static class IndexWriter extends SortedTableWriter.AbstractIndexWriter
     {
-        private final SequentialWriter rowIndexFile;
+        final SequentialWriter rowIndexWriter;
         private final FileHandle.Builder rowIndexFHBuilder;
-        private final SequentialWriter partitionIndexFile;
+        private final SequentialWriter partitionIndexWriter;
         private final FileHandle.Builder partitionIndexFHBuilder;
         private final PartitionIndexBuilder partitionIndex;
         boolean partitionIndexCompleted = false;
@@ -214,14 +196,14 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter, 
         IndexWriter(BtiTableWriterBuilder b)
         {
             super(b);
-            rowIndexFile = new SequentialWriter(descriptor.fileFor(Component.ROW_INDEX), b.getIOOptions().writerOptions);
+            rowIndexWriter = new SequentialWriter(descriptor.fileFor(Component.ROW_INDEX), b.getIOOptions().writerOptions);
             rowIndexFHBuilder = IndexComponent.fileBuilder(Component.ROW_INDEX, b);
-            partitionIndexFile = new SequentialWriter(descriptor.fileFor(Component.PARTITION_INDEX), b.getIOOptions().writerOptions);
+            partitionIndexWriter = new SequentialWriter(descriptor.fileFor(Component.PARTITION_INDEX), b.getIOOptions().writerOptions);
             partitionIndexFHBuilder = IndexComponent.fileBuilder(Component.PARTITION_INDEX, b);
-            partitionIndex = new PartitionIndexBuilder(partitionIndexFile, partitionIndexFHBuilder);
+            partitionIndex = new PartitionIndexBuilder(partitionIndexWriter, partitionIndexFHBuilder);
             // register listeners to be alerted when the data files are flushed
-            partitionIndexFile.setPostFlushListener(() -> partitionIndex.markPartitionIndexSynced(partitionIndexFile.getLastFlushOffset()));
-            rowIndexFile.setPostFlushListener(() -> partitionIndex.markRowIndexSynced(rowIndexFile.getLastFlushOffset()));
+            partitionIndexWriter.setPostFlushListener(() -> partitionIndex.markPartitionIndexSynced(partitionIndexWriter.getLastFlushOffset()));
+            rowIndexWriter.setPostFlushListener(() -> partitionIndex.markRowIndexSynced(rowIndexWriter.getLastFlushOffset()));
             b.getDataWriter().setPostFlushListener(() -> partitionIndex.markDataSynced(b.getDataWriter().getLastFlushOffset()));
         }
 
@@ -231,15 +213,15 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter, 
             long position;
             if (indexEntry.isIndexed())
             {
-                long indexStart = rowIndexFile.position();
+                long indexStart = rowIndexWriter.position();
                 try
                 {
-                    ByteBufferUtil.writeWithShortLength(key.getKey(), rowIndexFile);
-                    ((TrieIndexEntry) indexEntry).serialize(rowIndexFile, rowIndexFile.position());
+                    ByteBufferUtil.writeWithShortLength(key.getKey(), rowIndexWriter);
+                    ((TrieIndexEntry) indexEntry).serialize(rowIndexWriter, rowIndexWriter.position());
                 }
                 catch (IOException e)
                 {
-                    throw new FSWriteError(e, rowIndexFile.getFile());
+                    throw new FSWriteError(e, rowIndexWriter.getFile());
                 }
 
                 if (logger.isTraceEnabled())
@@ -257,13 +239,13 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter, 
 
         public boolean buildPartial(long dataPosition, Consumer<PartitionIndex> callWhenReady)
         {
-            return partitionIndex.buildPartial(callWhenReady, rowIndexFile.position(), dataPosition);
+            return partitionIndex.buildPartial(callWhenReady, rowIndexWriter.position(), dataPosition);
         }
 
         public void mark()
         {
-            riMark = rowIndexFile.mark();
-            piMark = partitionIndexFile.mark();
+            riMark = rowIndexWriter.mark();
+            piMark = partitionIndexWriter.mark();
         }
 
         public void resetAndTruncate()
@@ -271,8 +253,8 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter, 
             // we can't un-set the bloom filter addition, but extra keys in there are harmless.
             // we can't reset dbuilder either, but that is the last thing called in afterappend so
             // we assume that if that worked then we won't be trying to reset.
-            rowIndexFile.resetAndTruncate(riMark);
-            partitionIndexFile.resetAndTruncate(piMark);
+            rowIndexWriter.resetAndTruncate(riMark);
+            partitionIndexWriter.resetAndTruncate(piMark);
         }
 
         protected void doPrepare()
@@ -280,8 +262,8 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter, 
             flushBf();
 
             // truncate index file
-            rowIndexFile.prepareToCommit();
-            rowIndexFHBuilder.withLengthOverride(rowIndexFile.getLastFlushOffset());
+            rowIndexWriter.prepareToCommit();
+            rowIndexFHBuilder.withLengthOverride(rowIndexWriter.getLastFlushOffset());
 
             complete();
         }
@@ -298,37 +280,39 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter, 
             }
             catch (IOException e)
             {
-                throw new FSWriteError(e, partitionIndexFile.getFile());
+                throw new FSWriteError(e, partitionIndexWriter.getFile());
             }
         }
 
         PartitionIndex completedPartitionIndex()
         {
             complete();
+            rowIndexFHBuilder.withLengthOverride(0);
+            partitionIndexFHBuilder.withLengthOverride(0);
             try
             {
                 return PartitionIndex.load(partitionIndexFHBuilder, metadata.getLocal().partitioner, false);
             }
             catch (IOException e)
             {
-                throw new FSReadError(e, partitionIndexFile.getFile());
+                throw new FSReadError(e, partitionIndexWriter.getFile());
             }
         }
 
         protected Throwable doCommit(Throwable accumulate)
         {
-            return rowIndexFile.commit(accumulate);
+            return rowIndexWriter.commit(accumulate);
         }
 
         protected Throwable doAbort(Throwable accumulate)
         {
-            return rowIndexFile.abort(accumulate);
+            return rowIndexWriter.abort(accumulate);
         }
 
         @Override
         protected Throwable doPostCleanup(Throwable accumulate)
         {
-            return Throwables.close(accumulate, bf, partitionIndex, rowIndexFile, partitionIndexFile);
+            return Throwables.close(accumulate, bf, partitionIndex, rowIndexWriter, partitionIndexWriter);
         }
     }
 }
