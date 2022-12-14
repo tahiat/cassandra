@@ -108,6 +108,7 @@ public class SSTableFlushObserverTest
                                                                      .setMetadataCollector(new MetadataCollector(cfm.comparator).sstableLevel(0))
                                                                      .setSerializationHeader(new SerializationHeader(true, cfm, cfm.regularAndStaticColumns(), EncodingStats.NO_STATS))
                                                                      .setFlushObservers(Collections.singletonList(observer))
+                                                                     .addDefaultComponents()
                                                                      .build(transaction);
 
         SSTableReader reader = null;

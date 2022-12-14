@@ -50,6 +50,7 @@ import org.apache.cassandra.utils.IFilter;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.Throwables;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<BigTableReader, BigTableReaderBuilder>
@@ -71,24 +72,27 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
         {
             StatsComponent statsComponent = StatsComponent.load(descriptor, MetadataType.STATS, MetadataType.HEADER, MetadataType.VALIDATION);
             builder.setSerializationHeader(statsComponent.serializationHeader(builder.getTableMetadataRef().getLocal()));
-            assert !online || builder.getSerializationHeader() != null;
+            checkArgument(!online || builder.getSerializationHeader() != null);
 
             builder.setStatsMetadata(statsComponent.statsMetadata());
             ValidationMetadata validationMetadata = statsComponent.validationMetadata();
             validatePartitioner(builder.getTableMetadataRef().getLocal(), validationMetadata);
 
-            boolean filterNeeded = online && builder.getComponents().contains(Component.FILTER);
+            boolean filterNeeded = online;
             if (filterNeeded)
                 builder.setFilter(loadFilter(validationMetadata));
             boolean rebuildFilter = filterNeeded && builder.getFilter() == null;
 
-            boolean summaryNeeded = builder.getComponents().contains(Component.SUMMARY);
+            boolean summaryNeeded = true;
             if (summaryNeeded)
             {
                 IndexSummaryComponent summaryComponent = loadSummary();
-                builder.setFirst(summaryComponent.first);
-                builder.setLast(summaryComponent.last);
-                builder.setIndexSummary(summaryComponent.indexSummary);
+                if (summaryComponent != null)
+                {
+                    builder.setFirst(summaryComponent.first);
+                    builder.setLast(summaryComponent.last);
+                    builder.setIndexSummary(summaryComponent.indexSummary);
+                }
             }
             boolean rebuildSummary = summaryNeeded && builder.getIndexSummary() == null;
 
@@ -124,7 +128,7 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
             assert !summaryNeeded || builder.getIndexSummary() != null;
 
             if (builder.getFilter() == null)
-                builder.setFilter(new AlwaysPresentFilter());
+                builder.setFilter(FilterFactory.AlwaysPresent);
 
             builder.setDataFile(dataFileBuilder(builder.getStatsMetadata()).complete());
             builder.setIndexFile(indexFileBuilder(builder.getIndexSummary()).complete());
@@ -199,6 +203,8 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
 
                     if (rebuildFilter)
                         bf.add(key);
+
+                    keyReader.advance();
                 }
 
                 if (rebuildSummary)
@@ -211,7 +217,7 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
             throw ex;
         }
 
-        return Pair.create(bf, new IndexSummaryComponent(indexSummary, first, key));
+        return Pair.create(bf, rebuildSummary ? new IndexSummaryComponent(indexSummary, first, key) : null);
     }
 
     private IFilter loadFilter(ValidationMetadata validationMetadata)
@@ -233,11 +239,11 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
         IndexSummaryComponent summaryComponent = null;
         try
         {
-            summaryComponent = IndexSummaryComponent.loadOrDeleteCorrupted(descriptor, tableMetadataRef.get());
+            if (components.contains(Component.SUMMARY))
+                summaryComponent = IndexSummaryComponent.loadOrDeleteCorrupted(descriptor, tableMetadataRef.get());
+
             if (summaryComponent == null)
-            {
                 logger.debug("Index summary file is missing: {}", descriptor.filenameFor(Component.SUMMARY));
-            }
         }
         catch (IOException ex)
         {

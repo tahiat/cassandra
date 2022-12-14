@@ -194,7 +194,8 @@ public class RowIndexEntryTest extends CQLTester
 
             Iterator<Clustering<?>> clusteringIter = clusterings.iterator();
             partitionWriter.start(partitionKey, DeletionTime.LIVE);
-            partitionWriter.addStaticRow(staticRow);
+            if (staticRow != null)
+                partitionWriter.addStaticRow(staticRow);
             AbstractUnfilteredRowIterator rowIter = makeRowIter(staticRow, partitionKey, clusteringIter, dataWriterNew);
             while (rowIter.hasNext())
                 partitionWriter.addUnfiltered(rowIter.next());

@@ -55,6 +55,7 @@ import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.io.util.Memory;
 import org.apache.cassandra.utils.AlwaysPresentFilter;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.FilterFactory;
 
 import static org.apache.cassandra.service.ActiveRepairService.UNREPAIRED_SSTABLE;
 
@@ -190,7 +191,7 @@ public class MockSchema
                                                                          .setDataFile(fileHandle.sharedCopy())
                                                                          .setIndexFile(fileHandle.sharedCopy())
                                                                          .setIndexSummary(indexSummary.sharedCopy())
-                                                                         .setFilter(new AlwaysPresentFilter())
+                                                                         .setFilter(FilterFactory.AlwaysPresent)
                                                                          .setMaxDataAge(1L)
                                                                          .setStatsMetadata(metadata)
                                                                          .setOpenReason(SSTableReader.OpenReason.NORMAL)

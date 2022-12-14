@@ -511,6 +511,7 @@ public class SSTableReaderTest
         // check that bloomfilter is recreated when it doesn't exist and this causes the summary to be recreated
         components = desc.discoverComponents();
         components.remove(Component.FILTER);
+        components.remove(Component.SUMMARY);
 
         target = SSTableReader.open(desc, components, store.metadata);
 
@@ -635,7 +636,7 @@ public class SSTableReaderTest
         assert sections.size() == 1 : "Expected to find range in sstable" ;
 
         // re-open the same sstable as it would be during bulk loading
-        Set<Component> components = Sets.newHashSet(Component.DATA, Component.PRIMARY_INDEX);
+        Set<Component> components = Sets.newHashSet(sstable.descriptor.getFormat().primaryComponents());
         if (sstable.components.contains(Component.COMPRESSION_INFO))
             components.add(Component.COMPRESSION_INFO);
         SSTableReader bulkLoaded = SSTableReader.openForBatch(sstable.descriptor, components, store.metadata);

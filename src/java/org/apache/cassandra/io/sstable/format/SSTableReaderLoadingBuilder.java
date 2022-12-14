@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.util.Set;
 
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Sets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -64,20 +65,19 @@ public abstract class SSTableReaderLoadingBuilder<R extends SSTableReader, B ext
 
         checkNotNull(this.components);
         checkNotNull(this.tableMetadataRef);
-        checkArgument(this.tableMetadataRef.getLocal().keyspace.equals(this.descriptor.ksname) && this.tableMetadataRef.getLocal().name.equals(this.descriptor.cfname));
     }
 
     public R build(boolean validate, boolean online)
     {
+        checkArgument(components.contains(Component.DATA), "Data component is missing for sstable %s", descriptor);
+        if (validate)
+            checkArgument(this.components.containsAll(descriptor.getFormat().primaryComponents()), "Some required components (%s) are missing for sstable %s", Sets.difference(descriptor.getFormat().primaryComponents(), this.components), descriptor);
+
         B builder = (B) descriptor.formatType.info.getReaderFactory().builder(descriptor);
         builder.setOpenReason(NORMAL);
         builder.setMaxDataAge(Clock.Global.currentTimeMillis());
         builder.setTableMetadataRef(tableMetadataRef);
         builder.setComponents(components);
-
-        // Minimum components without which we can't do anything
-        assert builder.getComponents().contains(Component.DATA) : "Data component is missing for sstable " + descriptor;
-        assert !validate || builder.getComponents().containsAll(descriptor.getFormat().primaryComponents()) : "Primary index component is missing for sstable " + descriptor;
 
         R reader = null;
 
@@ -93,8 +93,6 @@ public abstract class SSTableReaderLoadingBuilder<R extends SSTableReader, B ext
                 logger.trace("SSTable {} loaded in {}ms", descriptor, Clock.Global.currentTimeMillis() - t0);
 
             reader = builder.build(validate, online);
-            if (validate)
-                reader.validate();
 
             if (logger.isTraceEnabled() && reader.getKeyCache() != null)
                 logger.trace("key cache contains {}/{} keys", reader.getKeyCache().size(), reader.getKeyCache().getCapacity());

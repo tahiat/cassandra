@@ -33,6 +33,7 @@ import org.apache.cassandra.io.util.FileOutputStreamPlus;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.utils.AlwaysPresentFilter;
 import org.apache.cassandra.utils.BloomFilterSerializer;
+import org.apache.cassandra.utils.FilterFactory;
 import org.apache.cassandra.utils.IFilter;
 
 public class FilterComponent
@@ -57,7 +58,7 @@ public class FilterComponent
             return null;
 
         if (filterFile.length() == 0)
-            return new AlwaysPresentFilter();
+            return FilterFactory.AlwaysPresent;
 
         try (FileInputStreamPlus stream = descriptor.fileFor(Component.FILTER).newInputStream())
         {
@@ -115,17 +116,21 @@ public class FilterComponent
             if (logger.isTraceEnabled())
                 logger.trace("Bloom filter for {} will not be loaded because fpChance={} is neglectable", descriptor, desiredFPChance);
 
-            filter = new AlwaysPresentFilter();
+            return FilterFactory.AlwaysPresent;
         }
         else if (!components.contains(Component.FILTER) || Double.isNaN(currentFPChance))
         {
             if (logger.isTraceEnabled())
                 logger.trace("Bloom filter for {} will not be loaded because filter component is missing or sstable lacks validation metadata", descriptor);
+
+            return null;
         }
         else if (!isFPChanceDiffNeglectable(desiredFPChance, currentFPChance) && rebuildFilterOnFPChanceChange)
         {
             if (logger.isTraceEnabled())
                 logger.trace("Bloom filter for {} will not be loaded because fpChance has changed from {} to {} and the filter should be recreated", descriptor, currentFPChance, desiredFPChance);
+
+            return null;
         }
 
         try

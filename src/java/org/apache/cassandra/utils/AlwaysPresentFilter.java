@@ -25,6 +25,10 @@ import org.apache.cassandra.utils.concurrent.Ref;
 
 public class AlwaysPresentFilter implements IFilter
 {
+    public static final AlwaysPresentFilter instance = new AlwaysPresentFilter();
+
+    private AlwaysPresentFilter() { }
+
     public boolean isPresent(FilterKey key)
     {
         return true;

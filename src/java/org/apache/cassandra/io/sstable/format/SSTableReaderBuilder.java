@@ -169,7 +169,9 @@ public abstract class SSTableReaderBuilder<R extends SSTableReader, B extends SS
         {
             JVMStabilityInspector.inspectThrowable(ex);
             reader.selfRef().release();
+            throw ex;
         }
+
         return reader;
     }
 }

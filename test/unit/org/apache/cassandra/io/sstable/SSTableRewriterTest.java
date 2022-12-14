@@ -884,14 +884,15 @@ public class SSTableRewriterTest extends SSTableWriterTestBase
             try
             {
                 UnfilteredRowIterator uri = mock(UnfilteredRowIterator.class);
-                when(uri.partitionLevelDeletion()).thenReturn(new DeletionTime(0,0));
+                when(uri.partitionLevelDeletion()).thenReturn(new DeletionTime(0, 0));
                 when(uri.partitionKey()).thenReturn(bopKeyFromInt(0));
                 // should not be able to append after buffer release on switch
                 firstWriter.append(uri);
                 fail("Expected AssertionError was not thrown.");
             }
-            catch(AssertionError ae) {
-                if (!ae.getMessage().contains("update is being called after releaseBuffers"))
+            catch (AssertionError ae)
+            {
+                if (!ae.getMessage().contains("update is being called after releaseBuffers") && !ae.getMessage().contains("Attempt to use a closed data output"))
                     throw ae;
             }
         }
