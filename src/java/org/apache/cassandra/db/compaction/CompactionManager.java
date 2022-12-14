@@ -44,7 +44,7 @@ import org.apache.cassandra.concurrent.WrappedExecutorPlus;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.io.sstable.IVerifier;
 import org.apache.cassandra.io.sstable.format.IScrubber;
-import org.apache.cassandra.io.sstable.format.big.Verifier;
+import org.apache.cassandra.io.sstable.format.big.BigTableVerifier;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.locator.RangesAtEndpoint;
 import org.slf4j.Logger;
@@ -485,7 +485,7 @@ public class CompactionManager implements CompactionManagerMBean
         }, jobs, OperationType.SCRUB);
     }
 
-    public AllSSTableOpStatus performVerify(ColumnFamilyStore cfs, Verifier.Options options) throws InterruptedException, ExecutionException
+    public AllSSTableOpStatus performVerify(ColumnFamilyStore cfs, BigTableVerifier.Options options) throws InterruptedException, ExecutionException
     {
         assert !cfs.isIndex();
         return parallelAllSSTableOperation(cfs, new OneSSTableOperation()
@@ -1257,7 +1257,7 @@ public class CompactionManager implements CompactionManagerMBean
                                                                         .checkData(checkData)
                                                                         .reinsertOverflowedTTLRows(reinsertOverflowedTTL)
                                                                         .build();
-        try (IScrubber scrubber = modifier.onlyOne().getScrubber(new OutputHandler.LogOutput(), modifier, scrubOptions))
+        try (IScrubber scrubber = modifier.onlyOne().getScrubber(modifier, new OutputHandler.LogOutput(), scrubOptions))
         {
             scrubInfo = scrubber.getScrubInfo();
             activeCompactions.beginCompaction(scrubInfo);
@@ -1271,7 +1271,7 @@ public class CompactionManager implements CompactionManagerMBean
     }
 
     @VisibleForTesting
-    void verifyOne(SSTableReader sstable, Verifier.Options options, ActiveCompactionsTracker activeCompactions)
+    void verifyOne(SSTableReader sstable, BigTableVerifier.Options options, ActiveCompactionsTracker activeCompactions)
     {
         CompactionInfo.Holder verifyInfo = null;
 

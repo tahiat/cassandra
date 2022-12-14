@@ -136,7 +136,7 @@ public class StandaloneVerifier
                 }
                 catch (Exception e)
                 {
-                    handler.warn(String.format("Error verifying %s: %s", sstable, e.getMessage()), e);
+                    handler.warn(e, String.format("Error verifying %s: %s", sstable, e.getMessage()));
                     hasFailed = true;
                 }
             }

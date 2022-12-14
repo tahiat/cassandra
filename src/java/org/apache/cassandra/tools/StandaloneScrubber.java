@@ -222,7 +222,7 @@ public class StandaloneScrubber
                     try (LifecycleTransaction txn = LifecycleTransaction.offline(OperationType.SCRUB, sstable))
                     {
                         txn.obsoleteOriginals(); // make sure originals are deleted and avoid NPE if index is missing, CASSANDRA-9591
-                        try (IScrubber scrubber = txn.onlyOne().getScrubber(handler, txn, options.build()))
+                        try (IScrubber scrubber = txn.onlyOne().getScrubber(txn, handler, options.build()))
                         {
                             scrubber.scrub();
                         }

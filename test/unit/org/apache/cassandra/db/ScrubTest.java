@@ -35,12 +35,7 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.apache.cassandra.io.sstable.format.CompressionInfoComponent;
-import org.apache.cassandra.io.sstable.format.IScrubber;
-import org.apache.cassandra.io.sstable.format.big.BigTableWriterBuilder;
-import org.apache.cassandra.io.util.File;
 import org.apache.commons.lang3.StringUtils;
-
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -56,7 +51,6 @@ import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.compaction.OperationType;
-import org.apache.cassandra.io.sstable.format.big.BigTableScrubber;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.db.marshal.Int32Type;
@@ -78,10 +72,14 @@ import org.apache.cassandra.io.sstable.SSTableMultiWriter;
 import org.apache.cassandra.io.sstable.SSTableRewriter;
 import org.apache.cassandra.io.sstable.SSTableTxnWriter;
 import org.apache.cassandra.io.sstable.SimpleSSTableMultiWriter;
+import org.apache.cassandra.io.sstable.format.CompressionInfoComponent;
+import org.apache.cassandra.io.sstable.format.IScrubber;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.io.sstable.format.big.BigTableWriter;
+import org.apache.cassandra.io.sstable.format.big.BigTableWriterBuilder;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
+import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.schema.TableMetadataRef;
@@ -213,19 +211,20 @@ public class ScrubTest
 
         // with skipCorrupted == false, the scrub is expected to fail
         try (LifecycleTransaction txn = cfs.getTracker().tryModify(Collections.singletonList(sstable), OperationType.SCRUB);
-             IScrubber scrubber = new BigTableScrubber(cfs, txn, false, new OutputHandler.LogOutput(), true, false))
+             IScrubber scrubber = sstable.getScrubber(txn, new OutputHandler.LogOutput(), new IScrubber.Options.Builder().checkData().build()))
         {
             scrubber.scrub();
             fail("Expected a CorruptSSTableException to be thrown");
         }
-        catch (IOError err) {
+        catch (IOError err)
+        {
             assertTrue(err.getCause() instanceof CorruptSSTableException);
         }
 
         // with skipCorrupted == true, the corrupt rows will be skipped
         IScrubber.ScrubResult scrubResult;
         try (LifecycleTransaction txn = cfs.getTracker().tryModify(Collections.singletonList(sstable), OperationType.SCRUB);
-             IScrubber scrubber = new BigTableScrubber(cfs, txn, true, new OutputHandler.LogOutput(), true, false))
+             IScrubber scrubber = sstable.getScrubber(txn, new OutputHandler.LogOutput(), new IScrubber.Options.Builder().skipCorrupted().checkData().build()))
         {
             scrubResult = scrubber.scrubWithResult();
         }
@@ -243,7 +242,7 @@ public class ScrubTest
         else
         {
             assertEquals(1, scrubResult.badPartitions);
-            assertEquals(numPartitions-1, scrubResult.goodPartitions);
+            assertEquals(numPartitions - 1, scrubResult.goodPartitions);
         }
         assertEquals(1, cfs.getLiveSSTables().size());
 
@@ -270,18 +269,19 @@ public class ScrubTest
 
         // with skipCorrupted == false, the scrub is expected to fail
         try (LifecycleTransaction txn = cfs.getTracker().tryModify(Collections.singletonList(sstable), OperationType.SCRUB);
-             IScrubber scrubber = new BigTableScrubber(cfs, txn, false, new OutputHandler.LogOutput(), true, false))
+             IScrubber scrubber = sstable.getScrubber(txn, new OutputHandler.LogOutput(), new IScrubber.Options.Builder().checkData().build()))
         {
             // with skipCorrupted == true, the corrupt row will be skipped
             scrubber.scrub();
             fail("Expected a CorruptSSTableException to be thrown");
         }
-        catch (IOError err) {
+        catch (IOError err)
+        {
             assertTrue(err.getCause() instanceof CorruptSSTableException);
         }
 
         try (LifecycleTransaction txn = cfs.getTracker().tryModify(Collections.singletonList(sstable), OperationType.SCRUB);
-             IScrubber scrubber = new BigTableScrubber(cfs, txn, true, new OutputHandler.LogOutput(), true, false))
+             IScrubber scrubber = sstable.getScrubber(txn, new OutputHandler.LogOutput(), new IScrubber.Options.Builder().checkData().skipCorrupted().build()))
         {
             // with skipCorrupted == true, the corrupt row will be skipped
             scrubber.scrub();
@@ -422,7 +422,7 @@ public class ScrubTest
                 sstable.last = sstable.first;
 
             try (LifecycleTransaction scrubTxn = LifecycleTransaction.offline(OperationType.SCRUB, sstable);
-                 IScrubber scrubber = new BigTableScrubber(cfs, scrubTxn, false, new OutputHandler.LogOutput(), true, false))
+                 IScrubber scrubber = sstable.getScrubber(scrubTxn, new OutputHandler.LogOutput(), new IScrubber.Options.Builder().checkData().build()))
             {
                 scrubber.scrub();
             }
@@ -448,9 +448,9 @@ public class ScrubTest
             CompressionMetadata compData = CompressionInfoComponent.load(sstable.descriptor);
 
             CompressionMetadata.Chunk chunk1 = compData.chunkFor(
-                    sstable.getPosition(PartitionPosition.ForKey.get(key1, sstable.getPartitioner()), SSTableReader.Operator.EQ));
+            sstable.getPosition(PartitionPosition.ForKey.get(key1, sstable.getPartitioner()), SSTableReader.Operator.EQ));
             CompressionMetadata.Chunk chunk2 = compData.chunkFor(
-                    sstable.getPosition(PartitionPosition.ForKey.get(key2, sstable.getPartitioner()), SSTableReader.Operator.EQ));
+            sstable.getPosition(PartitionPosition.ForKey.get(key2, sstable.getPartitioner()), SSTableReader.Operator.EQ));
 
             startPosition = Math.min(chunk1.offset, chunk2.offset);
             endPosition = Math.max(chunk1.offset + chunk1.length, chunk2.offset + chunk2.length);
@@ -513,10 +513,10 @@ public class ScrubTest
         Util.flush(cfs);
     }
 
-    public static void fillIndexCF(ColumnFamilyStore cfs, boolean composite, long ... values)
+    public static void fillIndexCF(ColumnFamilyStore cfs, boolean composite, long... values)
     {
         assertEquals(0, values.length % 2);
-        for (int i = 0; i < values.length; i +=2)
+        for (int i = 0; i < values.length; i += 2)
         {
             UpdateBuilder builder = UpdateBuilder.create(cfs.metadata(), String.valueOf(i));
             if (composite)
@@ -643,18 +643,18 @@ public class ScrubTest
     }
 
     @SuppressWarnings("SameParameterValue")
-    private void testScrubIndex(String cfName, String colName, boolean composite, boolean ... scrubs)
-            throws IOException, ExecutionException, InterruptedException
+    private void testScrubIndex(String cfName, String colName, boolean composite, boolean... scrubs)
+    throws IOException, ExecutionException, InterruptedException
     {
         CompactionManager.instance.disableAutoCompaction();
         ColumnFamilyStore cfs = keyspace.getColumnFamilyStore(cfName);
 
         int numRows = 1000;
-        long[] colValues = new long [numRows * 2]; // each row has two columns
-        for (int i = 0; i < colValues.length; i+=2)
+        long[] colValues = new long[numRows * 2]; // each row has two columns
+        for (int i = 0; i < colValues.length; i += 2)
         {
             colValues[i] = (i % 4 == 0 ? 1L : 2L); // index column
-            colValues[i+1] = 3L; //other column
+            colValues[i + 1] = 3L; //other column
         }
         fillIndexCF(cfs, composite, colValues);
 
@@ -665,7 +665,7 @@ public class ScrubTest
         // scrub index
         Set<ColumnFamilyStore> indexCfss = cfs.indexManager.getAllIndexColumnFamilyStores();
         assertEquals(1, indexCfss.size());
-        for(ColumnFamilyStore indexCfs : indexCfss)
+        for (ColumnFamilyStore indexCfs : indexCfss)
         {
             for (int i = 0; i < scrubs.length; i++)
             {
@@ -674,11 +674,11 @@ public class ScrubTest
                 { //make sure the next scrub fails
                     overrideWithGarbage(indexCfs.getLiveSSTables().iterator().next(), ByteBufferUtil.bytes(1L), ByteBufferUtil.bytes(2L));
                 }
-                CompactionManager.AllSSTableOpStatus result = indexCfs.scrub(false, false, false, true, false,0);
+                CompactionManager.AllSSTableOpStatus result = indexCfs.scrub(false, false, false, true, false, 0);
                 assertEquals(failure ?
                              CompactionManager.AllSSTableOpStatus.ABORTED :
                              CompactionManager.AllSSTableOpStatus.SUCCESSFUL,
-                                result);
+                             result);
             }
         }
 
@@ -740,7 +740,7 @@ public class ScrubTest
     /**
      * Tests with invalid sstables (containing duplicate entries in 2.0 and 3.0 storage format),
      * that were caused by upgrading from 2.x with duplicate range tombstones.
-     *
+     * <p>
      * See CASSANDRA-12144 for details.
      */
     @Test

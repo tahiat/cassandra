@@ -656,7 +656,7 @@ public class BtiTableReader extends SSTableReader
 
 
     @Override
-    public IScrubber getScrubber(OutputHandler outputHandler, LifecycleTransaction transaction, IScrubber.Options options)
+    public IScrubber getScrubber(LifecycleTransaction transaction, OutputHandler outputHandler, IScrubber.Options options)
     {
         ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(metadata().id);
         Preconditions.checkArgument(transaction.originals().contains(this));

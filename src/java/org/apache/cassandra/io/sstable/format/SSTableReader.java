@@ -1817,8 +1817,8 @@ public abstract class SSTableReader extends SSTable implements UnfilteredSource,
         tidy.global.maybePersistSSTableReadMeter();
     }
 
-    public abstract IScrubber getScrubber(OutputHandler outputHandler,
-                                          LifecycleTransaction transaction,
+    public abstract IScrubber getScrubber(LifecycleTransaction transaction,
+                                          OutputHandler outputHandler,
                                           IScrubber.Options options);
 
     public abstract IVerifier getVerifier(OutputHandler outputHandler,

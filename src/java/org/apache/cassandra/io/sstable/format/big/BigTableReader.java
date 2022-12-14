@@ -111,7 +111,6 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
         return rowIterator(null, key, rie, slices, selectedColumns, reversed);
     }
 
-    @SuppressWarnings("resource")
     public UnfilteredRowIterator rowIterator(FileDataInput file, DecoratedKey key, RowIndexEntry indexEntry, Slices slices, ColumnFilter selectedColumns, boolean reversed)
     {
         if (indexEntry == null)
@@ -232,7 +231,7 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
                                              SSTableReadsListener listener)
     {
         // Having no index file is impossible in a normal operation. The only way it might happen is running
-        // Scrubber that does not really rely onto this method.
+        // Scrubber that does not really rely on this method.
         if (ifile == null)
         {
             return null;
@@ -300,7 +299,7 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
         int effectiveInterval = indexSummary.getEffectiveIndexIntervalAfterIndex(sampledIndex);
 
         // scan the on-disk index, starting at the nearest sampled position.
-        // The check against IndexInterval is to be exit the loop in the EQ case when the key looked for is not present
+        // The check against IndexInterval is to be exited the loop in the EQ case when the key looked for is not present
         // (bloom filter false positive). But note that for non-EQ cases, we might need to check the first key of the
         // next index position because the searched key can be greater the last key of the index interval checked if it
         // is lesser than the first key of next interval (and in that case we must return the position of the first key
@@ -466,7 +465,6 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
     }
 
     /**
-     * @param ranges
      * @return An estimate of the number of keys for given ranges in this SSTable.
      */
     @Override
@@ -507,22 +505,22 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
     }
 
     @Override
-    public IScrubber getScrubber(OutputHandler outputHandler, LifecycleTransaction transaction, IScrubber.Options options)
+    public IScrubber getScrubber(LifecycleTransaction transaction, OutputHandler outputHandler, IScrubber.Options options)
     {
         ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(metadata().id);
         Preconditions.checkArgument(transaction.originals().contains(this));
-        return new BigTableScrubber(cfs, transaction, options.skipCorrupted, outputHandler, options.checkData, options.reinsertOverflowedTTLRows);
+        return new BigTableScrubber(cfs, transaction, outputHandler, options);
     }
 
     @Override
     public IVerifier getVerifier(OutputHandler outputHandler, boolean isOffline, IVerifier.Options options)
     {
         ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(metadata().id);
-        return new Verifier(cfs, this, outputHandler, isOffline, options);
+        return new BigTableVerifier(cfs, this, outputHandler, isOffline, options);
     }
 
     /**
-     * Gets the position in the index file to start scanning to find the given key (at most indexInterval keys away,
+     * Gets the position with the index file to start scanning to find the given key (at most indexInterval keys away,
      * modulo downsampling of the index summary). Always returns a {@code value >= 0}
      */
     long getIndexScanPosition(PartitionPosition key)
@@ -620,7 +618,6 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
      *
      * @param samplingLevel the desired sampling level for the index summary on the new SSTableReader
      * @return a new SSTableReader
-     * @throws IOException
      */
     @SuppressWarnings("resource")
     public BigTableReader cloneWithNewSummarySamplingLevel(ColumnFamilyStore parent, int samplingLevel) throws IOException
@@ -662,7 +659,7 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
 
     private IndexSummary buildSummaryAtLevel(int newSamplingLevel) throws IOException
     {
-        // we read the positions in a BRAF so we don't have to worry about an entry spanning a mmap boundary.
+        // we read the positions in a BRAF, so we don't have to worry about an entry spanning a mmap boundary.
         RandomAccessReader primaryIndex = RandomAccessReader.open(new File(descriptor.filenameFor(Component.PRIMARY_INDEX)));
         try
         {

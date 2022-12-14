@@ -44,11 +44,22 @@ public interface IVerifier extends Closeable
     class Options
     {
         public final boolean invokeDiskFailurePolicy;
+
+        /**
+         * Force extended verification - unless it is enabled, extended verificiation will be done only
+         * if there is no digest present. Setting it along with quick makes no sense.
+         */
         public final boolean extendedVerification;
+
         public final boolean checkVersion;
         public final boolean mutateRepairStatus;
         public final boolean checkOwnsTokens;
+
+        /**
+         * Quick check which does not include sstable data verification.
+         */
         public final boolean quick;
+
         public final Function<String, ? extends Collection<Range<Token>>> tokenLookup;
 
         private Options(boolean invokeDiskFailurePolicy,

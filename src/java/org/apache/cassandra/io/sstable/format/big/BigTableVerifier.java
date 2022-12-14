@@ -15,56 +15,63 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.cassandra.io.sstable.format.trieindex;
+package org.apache.cassandra.io.sstable.format.big;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.file.NoSuchFileException;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
+import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Throwables;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.compaction.CompactionInterruptedException;
+import org.apache.cassandra.db.rows.Cell;
+import org.apache.cassandra.db.rows.Row;
+import org.apache.cassandra.db.rows.Unfiltered;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.dht.LocalPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
-import org.apache.cassandra.io.sstable.CorruptSSTableException;
+import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.IVerifier;
-import org.apache.cassandra.io.sstable.KeyReader;
 import org.apache.cassandra.io.sstable.SSTableIdentityIterator;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SortedTableVerifier;
+import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.io.util.FileUtils;
+import org.apache.cassandra.io.util.RandomAccessReader;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.OutputHandler;
 
-public class BtiTableVerifier extends SortedTableVerifier<BtiTableReader> implements IVerifier
+public class BigTableVerifier extends SortedTableVerifier<BigTableReader> implements IVerifier
 {
-    public BtiTableVerifier(ColumnFamilyStore cfs, BtiTableReader sstable, boolean isOffline, Options options)
-    {
-        this(cfs, sstable, new OutputHandler.LogOutput(), isOffline, options);
-    }
+    private final RandomAccessReader indexFile;
+    private final RowIndexEntry.IndexSerializer rowIndexEntrySerializer;
 
-    public BtiTableVerifier(ColumnFamilyStore cfs, BtiTableReader sstable, OutputHandler outputHandler, boolean isOffline, Options options)
+    public BigTableVerifier(ColumnFamilyStore cfs, BigTableReader sstable, OutputHandler outputHandler, boolean isOffline, Options options)
     {
         super(cfs, sstable, outputHandler, isOffline, options);
+
+        this.rowIndexEntrySerializer = new RowIndexEntry.Serializer(sstable.descriptor.version, sstable.header);
+        this.indexFile = RandomAccessReader.open(new File(sstable.descriptor.filenameFor(Component.PRIMARY_INDEX)));
     }
 
+    @Override
     public void verify()
     {
-        boolean extended = options.extendedVerification;
-        long rowStart;
-
         verifySSTableVersion();
 
         verifySSTableMetadata();
 
         verifyIndex();
+
+        verifyIndexSummary();
 
         verifyBloomFilter();
 
@@ -90,10 +97,14 @@ public class BtiTableVerifier extends SortedTableVerifier<BtiTableReader> implem
         long rowStart;
         outputHandler.output("Extended Verify requested, proceeding to inspect values");
 
-        try (KeyReader indexIterator = sstable.keyReader())
+        try
         {
-            if (indexIterator.dataPosition() != 0)
-                markAndThrow(new RuntimeException("First row position from index != 0: " + indexIterator.dataPosition()));
+            ByteBuffer nextIndexKey = ByteBufferUtil.readWithShortLength(indexFile);
+            {
+                long firstRowPositionFromIndex = rowIndexEntrySerializer.deserializePositionAndSkip(indexFile);
+                if (firstRowPositionFromIndex != 0)
+                    markAndThrow(new RuntimeException("firstRowPositionFromIndex != 0: " + firstRowPositionFromIndex));
+            }
 
             List<Range<Token>> ownedRanges = isOffline ? Collections.emptyList() : Range.normalize(tokenLookup.apply(cfs.metadata().keyspace));
             RangeOwnHelper rangeOwnHelper = new RangeOwnHelper(ownedRanges);
@@ -132,13 +143,14 @@ public class BtiTableVerifier extends SortedTableVerifier<BtiTableReader> implem
                     }
                 }
 
-                ByteBuffer currentIndexKey = indexIterator.key();
+                ByteBuffer currentIndexKey = nextIndexKey;
                 long nextRowPositionFromIndex = 0;
                 try
                 {
-                    nextRowPositionFromIndex = indexIterator.advance()
-                                               ? indexIterator.dataPosition()
-                                               : dataFile.length();
+                    nextIndexKey = indexFile.isEOF() ? null : ByteBufferUtil.readWithShortLength(indexFile);
+                    nextRowPositionFromIndex = indexFile.isEOF()
+                                               ? dataFile.length()
+                                               : rowIndexEntrySerializer.deserializePositionAndSkip(indexFile);
                 }
                 catch (Throwable th)
                 {
@@ -155,14 +167,48 @@ public class BtiTableVerifier extends SortedTableVerifier<BtiTableReader> implem
                 String keyName = key == null ? "(unreadable key)" : ByteBufferUtil.bytesToHex(key.getKey());
                 outputHandler.debug("row %s is %s", keyName, FBUtilities.prettyPrintMemory(dataSize));
 
+                assert currentIndexKey != null || indexFile.isEOF();
+
                 try
                 {
                     if (key == null || dataSize > dataFile.length())
                         markAndThrow(new RuntimeException(String.format("key = %s, dataSize=%d, dataFile.length() = %d", key, dataSize, dataFile.length())));
 
-                    //mimic the scrub read path, intentionally unused
-                    UnfilteredRowIterator iterator = SSTableIdentityIterator.create(sstable, dataFile, key);
-                    iterator.close();
+                    try (UnfilteredRowIterator iterator = SSTableIdentityIterator.create(sstable, dataFile, key))
+                    {
+                        Row first = null;
+                        int duplicateRows = 0;
+                        long minTimestamp = Long.MAX_VALUE;
+                        long maxTimestamp = Long.MIN_VALUE;
+                        while (iterator.hasNext())
+                        {
+                            Unfiltered uf = iterator.next();
+                            if (uf.isRow())
+                            {
+                                Row row = (Row) uf;
+                                if (first != null && first.clustering().equals(row.clustering()))
+                                {
+                                    duplicateRows++;
+                                    for (Cell cell : row.cells())
+                                    {
+                                        maxTimestamp = Math.max(cell.timestamp(), maxTimestamp);
+                                        minTimestamp = Math.min(cell.timestamp(), minTimestamp);
+                                    }
+                                }
+                                else
+                                {
+                                    if (duplicateRows > 0)
+                                        logDuplicates(key, first, duplicateRows, minTimestamp, maxTimestamp);
+                                    duplicateRows = 0;
+                                    first = row;
+                                    maxTimestamp = Long.MIN_VALUE;
+                                    minTimestamp = Long.MAX_VALUE;
+                                }
+                            }
+                        }
+                        if (duplicateRows > 0)
+                            logDuplicates(key, first, duplicateRows, minTimestamp, maxTimestamp);
+                    }
 
                     if ((prevKey != null && prevKey.compareTo(key) > 0) || !key.getKey().equals(currentIndexKey) || dataStart != dataStartFromIndex)
                         markAndThrow(new RuntimeException("Key out of order: previous = " + prevKey + " : current = " + key));
@@ -182,11 +228,27 @@ public class BtiTableVerifier extends SortedTableVerifier<BtiTableReader> implem
         }
         catch (Throwable t)
         {
-            throw Throwables.propagate(t);
+            Throwables.throwIfUnchecked(t);
+            throw new RuntimeException(t);
         }
         finally
         {
             controller.close();
+        }
+    }
+
+    private void verifyIndexSummary()
+    {
+        try
+        {
+            outputHandler.debug("Deserializing index summary for %s", sstable);
+            deserializeIndexSummary(sstable);
+        }
+        catch (Throwable t)
+        {
+            outputHandler.output("Index summary is corrupt - if it is removed it will get rebuilt on startup %s", sstable.descriptor.filenameFor(Component.SUMMARY));
+            outputHandler.warn(t);
+            markAndThrow(t, false);
         }
     }
 
@@ -204,23 +266,61 @@ public class BtiTableVerifier extends SortedTableVerifier<BtiTableReader> implem
         }
     }
 
+    private void logDuplicates(DecoratedKey key, Row first, int duplicateRows, long minTimestamp, long maxTimestamp)
+    {
+        String keyString = sstable.metadata().partitionKeyType.getString(key.getKey());
+        long firstMaxTs = Long.MIN_VALUE;
+        long firstMinTs = Long.MAX_VALUE;
+        for (Cell cell : first.cells())
+        {
+            firstMaxTs = Math.max(firstMaxTs, cell.timestamp());
+            firstMinTs = Math.min(firstMinTs, cell.timestamp());
+        }
+        outputHandler.output("%d duplicate rows found for [%s %s] in %s.%s (%s), timestamps: [first row (%s, %s)], [duplicates (%s, %s, eq:%b)]",
+                             duplicateRows,
+                             keyString, first.clustering().toString(sstable.metadata()),
+                             sstable.metadata().keyspace,
+                             sstable.metadata().name,
+                             sstable,
+                             dateString(firstMinTs), dateString(firstMaxTs),
+                             dateString(minTimestamp), dateString(maxTimestamp), minTimestamp == maxTimestamp);
+    }
+
+    private String dateString(long time)
+    {
+        return Instant.ofEpochMilli(TimeUnit.MICROSECONDS.toMillis(time)).toString();
+    }
+
+
     private void deserializeIndex(SSTableReader sstable) throws IOException
     {
-        try (KeyReader it = sstable.keyReader())
+        try (RandomAccessReader primaryIndex = RandomAccessReader.open(new File(sstable.descriptor.filenameFor(Component.PRIMARY_INDEX))))
         {
-            ByteBuffer last = it.key();
-            while (it.advance()) last = it.key(); // no-op, just check if index is readable
-            if (!Objects.equals(last, sstable.last.getKey()))
-                throw new CorruptSSTableException(new IOException("Failed to read partition index"), it.toString());
+            long indexSize = primaryIndex.length();
+
+            while ((primaryIndex.getFilePointer()) != indexSize)
+            {
+                ByteBuffer key = ByteBufferUtil.readWithShortLength(primaryIndex);
+                RowIndexEntry.Serializer.skip(primaryIndex, sstable.descriptor.version);
+            }
         }
     }
 
+    private void deserializeIndexSummary(SSTableReader sstable) throws IOException
+    {
+        IndexSummaryComponent summaryComponent = IndexSummaryComponent.load(sstable.descriptor, cfs.metadata());
+        if (summaryComponent == null)
+            throw new NoSuchFileException("Index summary component of sstable " + sstable.descriptor.baseFilename() + " is missing");
+    }
+
+    @Override
     public void close()
     {
         fileAccessLock.writeLock().lock();
         try
         {
             FileUtils.closeQuietly(dataFile);
+            FileUtils.closeQuietly(indexFile);
         }
         finally
         {

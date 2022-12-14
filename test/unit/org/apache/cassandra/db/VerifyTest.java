@@ -42,7 +42,7 @@ import org.apache.cassandra.batchlog.BatchlogManager;
 import org.apache.cassandra.cache.ChunkCache;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.io.sstable.IVerifier;
-import org.apache.cassandra.io.sstable.format.big.Verifier;
+import org.apache.cassandra.io.sstable.format.big.BigTableVerifier;
 import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.cassandra.dht.ByteOrderedPartitioner;
 import org.apache.cassandra.dht.Murmur3Partitioner;
@@ -77,7 +77,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 /**
- * Test for {@link Verifier}.
+ * Test for {@link BigTableVerifier}.
  * 
  * Note: the complete coverage is composed of:
  * - {@link org.apache.cassandra.tools.StandaloneVerifierOnSSTablesTest}
@@ -626,7 +626,7 @@ public class VerifyTest
         normalized.add(r(20,25));
         normalized.add(r(26,200));
 
-        Verifier.RangeOwnHelper roh = new Verifier.RangeOwnHelper(normalized);
+        BigTableVerifier.RangeOwnHelper roh = new BigTableVerifier.RangeOwnHelper(normalized);
 
         roh.validate(dk(1));
         roh.validate(dk(10));
@@ -650,7 +650,7 @@ public class VerifyTest
     {
         List<Range<Token>> normalized = new ArrayList<>();
         normalized.add(r(0,10));
-        Verifier.RangeOwnHelper roh = new Verifier.RangeOwnHelper(normalized);
+        BigTableVerifier.RangeOwnHelper roh = new BigTableVerifier.RangeOwnHelper(normalized);
         roh.validate(dk(1));
         // call with smaller token to get exception
         roh.validate(dk(0));
@@ -661,7 +661,7 @@ public class VerifyTest
     public void testRangeOwnHelperNormalize()
     {
         List<Range<Token>> normalized = Range.normalize(Collections.singletonList(r(0,0)));
-        Verifier.RangeOwnHelper roh = new Verifier.RangeOwnHelper(normalized);
+        BigTableVerifier.RangeOwnHelper roh = new BigTableVerifier.RangeOwnHelper(normalized);
         roh.validate(dk(Long.MIN_VALUE));
         roh.validate(dk(0));
         roh.validate(dk(Long.MAX_VALUE));
@@ -671,7 +671,7 @@ public class VerifyTest
     public void testRangeOwnHelperNormalizeWrap()
     {
         List<Range<Token>> normalized = Range.normalize(Collections.singletonList(r(Long.MAX_VALUE - 1000,Long.MIN_VALUE + 1000)));
-        Verifier.RangeOwnHelper roh = new Verifier.RangeOwnHelper(normalized);
+        BigTableVerifier.RangeOwnHelper roh = new BigTableVerifier.RangeOwnHelper(normalized);
         roh.validate(dk(Long.MIN_VALUE));
         roh.validate(dk(Long.MAX_VALUE));
         boolean gotException = false;
@@ -689,7 +689,7 @@ public class VerifyTest
     @Test
     public void testEmptyRanges()
     {
-        new Verifier.RangeOwnHelper(Collections.emptyList()).validate(dk(1));
+        new BigTableVerifier.RangeOwnHelper(Collections.emptyList()).validate(dk(1));
     }
 
     @Test

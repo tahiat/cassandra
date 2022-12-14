@@ -107,7 +107,7 @@ public class GenerateTokens
         }
         catch (Throwable t)
         {
-            logger.warn("Error running tool.", t);
+            logger.warn(t, "Error running tool.");
             System.exit(1);
         }
     }

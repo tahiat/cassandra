@@ -728,9 +728,9 @@ public abstract class ForwardingSSTableReader extends SSTableReader
     }
 
     @Override
-    public IScrubber getScrubber(OutputHandler outputHandler, LifecycleTransaction transaction, IScrubber.Options options)
+    public IScrubber getScrubber(LifecycleTransaction transaction, OutputHandler outputHandler, IScrubber.Options options)
     {
-        return delegate.getScrubber(outputHandler, transaction, options);
+        return delegate.getScrubber(transaction, outputHandler, options);
     }
 
     @Override
