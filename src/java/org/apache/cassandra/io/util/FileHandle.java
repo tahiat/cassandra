@@ -374,18 +374,20 @@ public class FileHandle extends SharedCloseableImpl
                     {
                         regions = MmappedRegions.map(channel, compressionMetadata);
                         rebuffererFactory = maybeCached(new CompressedChunkReader.Mmap(channel, compressionMetadata, regions));
+                        lastRegions = null;
                     }
                     else
                     {
                         if (lastRegions != null && !lastRegions.isCleanedUp() && lastRegions.isValid(channel))
                         {
                             // for performance reasons, try to reuse the previously generated regions
+                            lastRegions.extend(length);
                             regions = lastRegions.sharedCopy();
-                            regions.extend(length);
                         }
                         else
                         {
                             regions = MmappedRegions.map(channel, length);
+                            lastRegions = regions;
                         }
                         rebuffererFactory = new MmapRebufferer(channel, length, regions);
                     }
@@ -405,7 +407,6 @@ public class FileHandle extends SharedCloseableImpl
                 Cleanup cleanup = new Cleanup(channel, rebuffererFactory, compressionMetadata, chunkCache);
 
                 FileHandle fileHandle = new FileHandle(cleanup, channel, rebuffererFactory, compressionMetadata, length);
-                lastRegions = regions;
                 return fileHandle;
             }
             catch (Throwable t)

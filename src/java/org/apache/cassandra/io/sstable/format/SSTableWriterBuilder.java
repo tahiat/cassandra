@@ -103,8 +103,11 @@ public abstract class SSTableWriterBuilder<W extends SSTableWriter, B extends SS
 
     public B addDefaultComponents()
     {
+        Preconditions.checkNotNull(getTableMetadataRef());
+
         Set<Component> components = new HashSet<>(descriptor.getFormat().writeComponents());
-        components.addAll(this.getComponents());
+        if (this.getComponents() != null)
+            components.addAll(this.getComponents());
 
         if (FilterComponent.shouldUseBloomFilter(getTableMetadataRef().getLocal().params.bloomFilterFpChance))
         {

@@ -42,6 +42,7 @@ import org.apache.cassandra.io.util.DataPosition;
 import org.apache.cassandra.io.util.FileHandle;
 import org.apache.cassandra.io.util.SequentialWriter;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Clock;
 import org.apache.cassandra.utils.IFilter;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.Throwables;
@@ -153,7 +154,7 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter, 
     {
 
         if (maxDataAge < 0)
-            maxDataAge = System.currentTimeMillis();
+            maxDataAge = Clock.Global.currentTimeMillis();
 
         return openInternal(openReason, iwriter::completedPartitionIndex);
     }
@@ -204,7 +205,8 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter, 
             // register listeners to be alerted when the data files are flushed
             partitionIndexWriter.setPostFlushListener(() -> partitionIndex.markPartitionIndexSynced(partitionIndexWriter.getLastFlushOffset()));
             rowIndexWriter.setPostFlushListener(() -> partitionIndex.markRowIndexSynced(rowIndexWriter.getLastFlushOffset()));
-            b.getDataWriter().setPostFlushListener(() -> partitionIndex.markDataSynced(b.getDataWriter().getLastFlushOffset()));
+            SequentialWriter dataWriter = b.getDataWriter();
+            dataWriter.setPostFlushListener(() -> partitionIndex.markDataSynced(dataWriter.getLastFlushOffset()));
         }
 
         public long append(DecoratedKey key, AbstractRowIndexEntry indexEntry) throws IOException

@@ -17,7 +17,6 @@
  */
 package org.apache.cassandra.io.sstable.format.trieindex;
 
-import java.io.Closeable;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.io.PrintStream;

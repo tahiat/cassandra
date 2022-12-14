@@ -45,6 +45,7 @@ import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.io.util.SequentialWriter;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.EstimatedHistogram;
+import org.apache.cassandra.utils.IFilter;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.Throwables;
 
@@ -113,6 +114,11 @@ public class BigTableWriter extends SortedTableWriter<BigFormatPartitionWriter, 
     {
         assert boundary == null || (boundary.indexLength > 0 && boundary.dataLength > 0);
 
+        IFilter filter = null;
+        IndexSummary indexSummary = null;
+        FileHandle dataFile = null;
+        FileHandle indexFile = null;
+
         BigTableReaderBuilder builder = unbuildTo(new BigTableReaderBuilder(descriptor)).setMaxDataAge(maxDataAge)
                                                                                         .setSerializationHeader(header)
                                                                                         .setOpenReason(openReason)
@@ -121,6 +127,7 @@ public class BigTableWriter extends SortedTableWriter<BigFormatPartitionWriter, 
 
         try
         {
+
             builder.setStatsMetadata(statsMetadata());
 
             EstimatedHistogram partitionSizeHistogram = builder.getStatsMetadata().estimatedPartitionSize;
@@ -135,16 +142,19 @@ public class BigTableWriter extends SortedTableWriter<BigFormatPartitionWriter, 
                 }
             }
 
-            builder.setIndexSummary(indexWriter.summary.build(metadata().partitioner, boundary));
+            filter = indexWriter.getFilterCopy();
+            builder.setFilter(filter);
+            indexSummary = indexWriter.summary.build(metadata().partitioner, boundary);
+            builder.setIndexSummary(indexSummary);
 
             long indexFileLength = descriptor.fileFor(Component.PRIMARY_INDEX).length();
             int indexBufferSize = ioOptions.diskOptimizationStrategy.bufferSize(indexFileLength / builder.getIndexSummary().size());
             FileHandle.Builder indexFileBuilder = indexWriter.builder;
-            FileHandle indexFile = indexFileBuilder.bufferSize(indexBufferSize)
-                                                   .withLengthOverride(boundary != null ? boundary.indexLength : -1)
-                                                   .complete();
+            indexFile = indexFileBuilder.bufferSize(indexBufferSize)
+                                        .withLengthOverride(boundary != null ? boundary.indexLength : -1)
+                                        .complete();
             builder.setIndexFile(indexFile);
-            FileHandle dataFile = openDataFile(boundary != null ? boundary.dataLength : -1, builder.getStatsMetadata());
+            dataFile = openDataFile(boundary != null ? boundary.dataLength : -1, builder.getStatsMetadata());
             builder.setDataFile(dataFile);
 
             return builder.build(true, true);
@@ -152,7 +162,7 @@ public class BigTableWriter extends SortedTableWriter<BigFormatPartitionWriter, 
         catch (Throwable t)
         {
             JVMStabilityInspector.inspectThrowable(t);
-            Throwables.closeAndAddSuppressed(t, builder.getDataFile(), builder.getIndexFile(), builder.getIndexSummary(), builder.getFilter());
+            Throwables.closeAndAddSuppressed(t, dataFile, indexFile, indexSummary, filter);
             throw t;
         }
     }
@@ -218,7 +228,8 @@ public class BigTableWriter extends SortedTableWriter<BigFormatPartitionWriter, 
             summary = new IndexSummaryBuilder(b.getKeyCount(), b.getTableMetadataRef().getLocal().params.minIndexInterval, Downsampling.BASE_SAMPLING_LEVEL);
             // register listeners to be alerted when the data files are flushed
             writer.setPostFlushListener(() -> summary.markIndexSynced(writer.getLastFlushOffset()));
-            b.getDataWriter().setPostFlushListener(() -> summary.markDataSynced(b.getDataWriter().getLastFlushOffset()));
+            SequentialWriter dataWriter = b.getDataWriter();
+            dataWriter.setPostFlushListener(() -> summary.markDataSynced(dataWriter.getLastFlushOffset()));
         }
 
         // finds the last (-offset) decorated key that can be guaranteed to occur fully in the flushed portion of the index file

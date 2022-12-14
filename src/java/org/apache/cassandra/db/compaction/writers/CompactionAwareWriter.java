@@ -38,7 +38,6 @@ import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTableRewriter;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
-import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.io.sstable.format.SSTableWriterBuilder;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.utils.FBUtilities;
@@ -263,12 +262,12 @@ public abstract class CompactionAwareWriter extends Transactional.AbstractTransa
     protected SSTableWriterBuilder<?, ?> newWriterBuilder(Descriptor descriptor)
     {
         return descriptor.getFormat().getWriterFactory().builder(descriptor)
-                         .addDefaultComponents()
                          .setTableMetadataRef(cfs.metadata)
                          .addFlushObserversForSecondaryIndexes(cfs.indexManager.listIndexes(), txn.opType())
                          .setTransientSSTable(isTransient)
                          .setRepairedAt(minRepairedAt)
                          .setPendingRepair(pendingRepair)
-                         .addFlushObserversForSecondaryIndexes(cfs.indexManager.listIndexes(), txn.opType());
+                         .addFlushObserversForSecondaryIndexes(cfs.indexManager.listIndexes(), txn.opType())
+                         .addDefaultComponents();
     }
 }

@@ -48,15 +48,15 @@ public class SSTableBuilder<S extends SSTable, B extends SSTableBuilder<S, B>>
 
     public B setComponents(Collection<Component> components)
     {
-        Preconditions.checkArgument(components.stream().allMatch(Objects::nonNull));
-        this.components = ImmutableSet.copyOf(components);
+        if (components != null)
+            this.components = ImmutableSet.copyOf(components);
+        else
+            this.components = null;
         return (B) this;
     }
 
     public B setTableMetadataRef(TableMetadataRef ref)
     {
-        Preconditions.checkNotNull(ref);
-        Preconditions.checkNotNull(ref.get());
         this.tableMetadataRef = ref;
         return (B) this;
     }
