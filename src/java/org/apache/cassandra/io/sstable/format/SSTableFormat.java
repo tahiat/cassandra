@@ -25,8 +25,7 @@ import com.google.common.base.CharMatcher;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.GaugeProvider;
 import org.apache.cassandra.io.sstable.format.big.BigFormat;
-import org.apache.cassandra.io.sstable.format.trieindex.TrieIndexFormat;
-import org.apache.cassandra.utils.OutputHandler;
+import org.apache.cassandra.io.sstable.format.trieindex.BtiFormat;
 
 /**
  * Provides the accessors to data on disk.
@@ -65,7 +64,7 @@ public interface SSTableFormat<R extends SSTableReader, W extends SSTableWriter>
     {
         //The original sstable format
         BIG("big", BigFormat.instance),
-        BTI("bti",TrieIndexFormat.instance);
+        BTI("bti", BtiFormat.instance);
 
         public final SSTableFormat<?, ?> info;
         public final String name;

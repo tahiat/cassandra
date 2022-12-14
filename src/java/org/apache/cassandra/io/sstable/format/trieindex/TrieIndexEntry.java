@@ -69,7 +69,7 @@ public final class TrieIndexEntry extends AbstractRowIndexEntry
     @Override
     public SSTableFormat<?, ?> getSSTableFormat()
     {
-        return TrieIndexFormat.instance;
+        return BtiFormat.instance;
     }
 
     @Override

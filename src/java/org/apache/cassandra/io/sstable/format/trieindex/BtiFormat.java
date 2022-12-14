@@ -40,7 +40,7 @@ import org.apache.cassandra.schema.TableMetadataRef;
 /**
  * Bigtable format with trie indices
  */
-public class TrieIndexFormat implements SSTableFormat<BtiTableReader, BtiTableWriter>
+public class BtiFormat implements SSTableFormat<BtiTableReader, BtiTableWriter>
 {
     private final static Set<Component> STREAMING_COMPONENTS = ImmutableSet.of(Component.DATA,
                                                                                Component.PARTITION_INDEX,
@@ -76,13 +76,13 @@ public class TrieIndexFormat implements SSTableFormat<BtiTableReader, BtiTableWr
                                                                            Component.FILTER,
                                                                            Component.STATS);
 
-    public static final TrieIndexFormat instance = new TrieIndexFormat();
+    public static final BtiFormat instance = new BtiFormat();
     public static final Version latestVersion = new TrieIndexVersion(TrieIndexVersion.current_version);
     static final ReaderFactory readerFactory = new ReaderFactory();
     static final WriterFactory writerFactory = new WriterFactory();
 
 
-    private TrieIndexFormat()
+    private BtiFormat()
     {
 
     }

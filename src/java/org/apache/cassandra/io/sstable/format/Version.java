@@ -36,8 +36,8 @@ public abstract class Version
     private static final Pattern VALIDATION = Pattern.compile("[a-z]+");
 
     protected final String version;
-    protected final SSTableFormat format;
-    protected Version(SSTableFormat format, String version)
+    protected final SSTableFormat<?, ?> format;
+    protected Version(SSTableFormat<?, ?> format, String version)
     {
         this.format = format;
         this.version = version;

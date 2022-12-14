@@ -389,11 +389,11 @@ public class BtiTableReader extends SSTableReader
     @Override
     public Iterable<DecoratedKey> getKeySamples(final Range<Token> range)
     {
-        Iterator<IndexPosIterator> partitionKeyIterators = TrieIndexScanner.makeBounds(this,
-                                                                                       Collections.singleton(range))
-                                                                           .stream()
-                                                                           .map(this::indexPosIteratorForRange)
-                                                                           .iterator();
+        Iterator<IndexPosIterator> partitionKeyIterators = BtiTableScanner.makeBounds(this,
+                                                                                      Collections.singleton(range))
+                                                                          .stream()
+                                                                          .map(this::indexPosIteratorForRange)
+                                                                          .iterator();
 
         if (!partitionKeyIterators.hasNext())
             return Collections.emptyList();
@@ -548,14 +548,14 @@ public class BtiTableReader extends SSTableReader
     @Override
     public ISSTableScanner getScanner()
     {
-        return TrieIndexScanner.getScanner(this);
+        return BtiTableScanner.getScanner(this);
     }
 
     @Override
     public ISSTableScanner getScanner(Collection<Range<Token>> ranges)
     {
         if (ranges != null)
-            return TrieIndexScanner.getScanner(this, ranges);
+            return BtiTableScanner.getScanner(this, ranges);
         else
             return getScanner();
     }
@@ -563,7 +563,7 @@ public class BtiTableReader extends SSTableReader
     @Override
     public ISSTableScanner getScanner(Iterator<AbstractBounds<PartitionPosition>> rangeIterator)
     {
-        return TrieIndexScanner.getScanner(this, rangeIterator);
+        return BtiTableScanner.getScanner(this, rangeIterator);
     }
 
     @Override
@@ -651,7 +651,7 @@ public class BtiTableReader extends SSTableReader
     @Override
     public UnfilteredPartitionIterator partitionIterator(ColumnFilter columnFilter, DataRange dataRange, SSTableReadsListener listener)
     {
-        return TrieIndexScanner.getScanner(this, columnFilter, dataRange, listener);
+        return BtiTableScanner.getScanner(this, columnFilter, dataRange, listener);
     }
 
 

@@ -59,7 +59,7 @@ import static org.apache.cassandra.dht.AbstractBounds.maxLeft;
 import static org.apache.cassandra.dht.AbstractBounds.minRight;
 
 // TODO STAR-247: implement unit test
-public class TrieIndexScanner implements ISSTableScanner
+public class BtiTableScanner implements ISSTableScanner
 {
     private final AtomicBoolean isClosed = new AtomicBoolean(false);
     protected final RandomAccessReader dfile;
@@ -86,7 +86,7 @@ public class TrieIndexScanner implements ISSTableScanner
                                              DataRange dataRange,
                                              SSTableReadsListener listener)
     {
-        return new TrieIndexScanner(sstable, columns, dataRange, makeBounds(sstable, dataRange).iterator(), listener);
+        return new BtiTableScanner(sstable, columns, dataRange, makeBounds(sstable, dataRange).iterator(), listener);
     }
 
     public static ISSTableScanner getScanner(BtiTableReader sstable, Collection<Range<Token>> tokenRanges)
@@ -101,14 +101,14 @@ public class TrieIndexScanner implements ISSTableScanner
 
     public static ISSTableScanner getScanner(BtiTableReader sstable, Iterator<AbstractBounds<PartitionPosition>> rangeIterator)
     {
-        return new TrieIndexScanner(sstable, ColumnFilter.all(sstable.metadata()), null, rangeIterator, SSTableReadsListener.NOOP_LISTENER);
+        return new BtiTableScanner(sstable, ColumnFilter.all(sstable.metadata()), null, rangeIterator, SSTableReadsListener.NOOP_LISTENER);
     }
 
-    private TrieIndexScanner(BtiTableReader sstable,
-                             ColumnFilter columns,
-                             DataRange dataRange,
-                             Iterator<AbstractBounds<PartitionPosition>> rangeIterator,
-                             SSTableReadsListener listener)
+    private BtiTableScanner(BtiTableReader sstable,
+                            ColumnFilter columns,
+                            DataRange dataRange,
+                            Iterator<AbstractBounds<PartitionPosition>> rangeIterator,
+                            SSTableReadsListener listener)
     {
         assert sstable != null;
 
@@ -328,7 +328,7 @@ public class TrieIndexScanner implements ISSTableScanner
                             else
                             {
                                 ClusteringIndexFilter filter = dataRange.clusteringIndexFilter(partitionKey());
-                                return sstable.iterator(dfile, partitionKey(), rowIndexEntry, filter.getSlices(TrieIndexScanner.this.metadata()), columns, filter.isReversed());
+                                return sstable.iterator(dfile, partitionKey(), rowIndexEntry, filter.getSlices(BtiTableScanner.this.metadata()), columns, filter.isReversed());
                             }
                         }
                         catch (CorruptSSTableException e)
