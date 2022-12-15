@@ -20,10 +20,8 @@ package org.apache.cassandra.io.sstable.format.trieindex;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -35,7 +33,6 @@ import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.filter.ClusteringIndexFilter;
 import org.apache.cassandra.db.filter.ColumnFilter;
-import org.apache.cassandra.db.partitions.AbstractUnfilteredPartitionIterator;
 import org.apache.cassandra.db.rows.LazilyInitializedUnfilteredRowIterator;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.dht.AbstractBounds;
@@ -45,6 +42,7 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.sstable.ISSTableScanner;
+import org.apache.cassandra.io.sstable.format.EmptySSTableScanner;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableReader.PartitionPositionBounds;
 import org.apache.cassandra.io.sstable.format.SSTableReadsListener;
@@ -174,7 +172,7 @@ public class BtiTableScanner implements ISSTableScanner
             left = maxLeft(left, sstable.first, true);
             // apparently isWrapAround() doesn't count Bounds that extend to the limit (min) as wrapping
             right = requested.right.isMinimum() ? new Boundary<>(sstable.last, true)
-                                                    : minRight(right, sstable.last, true);
+                                                : minRight(right, sstable.last, true);
             if (!isEmpty(left, right))
                 boundsList.add(AbstractBounds.bounds(left, right));
         }
@@ -359,73 +357,5 @@ public class BtiTableScanner implements ISSTableScanner
     public String toString()
     {
         return String.format("%s(dfile=%s sstable=%s)", getClass().getSimpleName(), dfile, sstable);
-    }
-
-    public static class EmptySSTableScanner extends AbstractUnfilteredPartitionIterator implements ISSTableScanner
-    {
-        private final SSTableReader sstable;
-
-        public EmptySSTableScanner(SSTableReader sstable)
-        {
-            this.sstable = sstable;
-        }
-
-        public long getFilePointer()
-        {
-            return 0;
-        }
-
-        public long getBytesScanned()
-        {
-            return 0;
-        }
-
-        @Override
-        public long getLengthInBytes()
-        {
-            return 0;
-        }
-
-        public long getCompressedLengthInBytes()
-        {
-            return 0;
-        }
-
-        @Override
-        public long getCurrentPosition()
-        {
-            return 0;
-        }
-
-        public int level()
-        {
-            return sstable.getSSTableLevel();
-        }
-
-        @Override
-        public Set<SSTableReader> getBackingSSTables()
-        {
-            return Collections.emptySet();
-        }
-
-        public TableMetadata metadata()
-        {
-            return sstable.metadata();
-        }
-
-        public void close()
-        {
-
-        }
-
-        public boolean hasNext()
-        {
-            return false;
-        }
-
-        public UnfilteredRowIterator next()
-        {
-            throw new NoSuchElementException();
-        }
     }
 }

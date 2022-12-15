@@ -34,6 +34,16 @@ import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.net.MessagingService;
 
+import static org.apache.cassandra.io.sstable.Component.COMPRESSION_INFO;
+import static org.apache.cassandra.io.sstable.Component.CRC;
+import static org.apache.cassandra.io.sstable.Component.DATA;
+import static org.apache.cassandra.io.sstable.Component.DIGEST;
+import static org.apache.cassandra.io.sstable.Component.FILTER;
+import static org.apache.cassandra.io.sstable.Component.PRIMARY_INDEX;
+import static org.apache.cassandra.io.sstable.Component.STATS;
+import static org.apache.cassandra.io.sstable.Component.SUMMARY;
+import static org.apache.cassandra.io.sstable.Component.TOC;
+
 /**
  * Legacy bigtable format
  */
@@ -44,39 +54,51 @@ public class BigFormat implements SSTableFormat<BigTableReader, BigTableWriter>
     private static final SSTableReader.Factory readerFactory = new BigTableReaderFactory();
     private static final SSTableWriter.Factory writerFactory = new WriterFactory();
 
-    private static final Set<Component> STREAM_COMPONENTS = ImmutableSet.of(Component.DATA,
-                                                                            Component.PRIMARY_INDEX,
-                                                                            Component.STATS,
-                                                                            Component.COMPRESSION_INFO,
-                                                                            Component.FILTER,
-                                                                            Component.SUMMARY,
-                                                                            Component.DIGEST,
-                                                                            Component.CRC);
+    private static final Set<Component> STREAM_COMPONENTS = ImmutableSet.of(DATA,
+                                                                            PRIMARY_INDEX,
+                                                                            STATS,
+                                                                            COMPRESSION_INFO,
+                                                                            FILTER,
+                                                                            SUMMARY,
+                                                                            DIGEST,
+                                                                            CRC);
 
-    private static final Set<Component> PRIMARY_COMPONENTS = ImmutableSet.of(Component.DATA,
-                                                                             Component.PRIMARY_INDEX);
+    private static final Set<Component> PRIMARY_COMPONENTS = ImmutableSet.of(DATA,
+                                                                             PRIMARY_INDEX);
 
-    private static final Set<Component> BATCH_COMPONENTS = ImmutableSet.of(Component.DATA,
-                                                                           Component.PRIMARY_INDEX,
-                                                                           Component.COMPRESSION_INFO,
-                                                                           Component.FILTER,
-                                                                           Component.STATS);
+    private static final Set<Component> BATCH_COMPONENTS = ImmutableSet.of(DATA,
+                                                                           PRIMARY_INDEX,
+                                                                           COMPRESSION_INFO,
+                                                                           FILTER,
+                                                                           STATS);
 
-    private static final Set<Component> UPLOAD_COMPONENTS = ImmutableSet.of(Component.DATA,
-                                                                            Component.PRIMARY_INDEX,
-                                                                            Component.SUMMARY,
-                                                                            Component.COMPRESSION_INFO,
-                                                                            Component.STATS);
+    private static final Set<Component> UPLOAD_COMPONENTS = ImmutableSet.of(DATA,
+                                                                            PRIMARY_INDEX,
+                                                                            SUMMARY,
+                                                                            COMPRESSION_INFO,
+                                                                            STATS);
 
-    private static final Set<Component> MUTABLE_COMPONENTS = ImmutableSet.of(Component.STATS,
-                                                                             Component.SUMMARY);
+    private static final Set<Component> MUTABLE_COMPONENTS = ImmutableSet.of(STATS,
+                                                                             SUMMARY);
 
-    private static final Set<Component> WRITE_COMPONENTS = ImmutableSet.of(Component.DATA,
-                                                                           Component.PRIMARY_INDEX,
-                                                                           Component.STATS,
-                                                                           Component.SUMMARY,
-                                                                           Component.TOC,
-                                                                           Component.DIGEST);
+    private static final Set<Component> WRITE_COMPONENTS = ImmutableSet.of(DATA,
+                                                                           PRIMARY_INDEX,
+                                                                           STATS,
+                                                                           SUMMARY,
+                                                                           TOC,
+                                                                           DIGEST);
+
+    private static final Set<Component> SUPPORTED_COMPONENTS = ImmutableSet.of(DATA,
+                                                                               PRIMARY_INDEX,
+                                                                               STATS,
+                                                                               COMPRESSION_INFO,
+                                                                               FILTER,
+                                                                               SUMMARY,
+                                                                               DIGEST,
+                                                                               CRC,
+                                                                               TOC);
+
+    private static final Set<Component> GENERATED_ON_LOAD_COMPONENTS = ImmutableSet.of(FILTER, SUMMARY);
 
     private BigFormat()
     {
@@ -171,6 +193,18 @@ public class BigFormat implements SSTableFormat<BigTableReader, BigTableWriter>
     public Set<Component> writeComponents()
     {
         return WRITE_COMPONENTS;
+    }
+
+    @Override
+    public Set<Component> supportedComponents()
+    {
+        return SUPPORTED_COMPONENTS;
+    }
+
+    @Override
+    public Set<Component> generatedOnLoadComponents()
+    {
+        return GENERATED_ON_LOAD_COMPONENTS;
     }
 
     static class KeyCacheValueSerializer implements AbstractRowIndexEntry.KeyCacheValueSerializer<BigTableReader, RowIndexEntry>

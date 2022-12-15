@@ -47,6 +47,7 @@ import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.index.Index;
 import org.apache.cassandra.index.SecondaryIndexBuilder;
 import org.apache.cassandra.io.sstable.IndexSummaryRedistribution;
+import org.apache.cassandra.io.sstable.format.IScrubber;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.big.BigTableVerifier;
 import org.apache.cassandra.schema.TableId;
@@ -200,7 +201,7 @@ public class ActiveCompactionsTest extends CQLTester
         try (LifecycleTransaction txn = getCurrentColumnFamilyStore().getTracker().tryModify(sstable, OperationType.SCRUB))
         {
             MockActiveCompactions mockActiveCompactions = new MockActiveCompactions();
-            CompactionManager.instance.scrubOne(txn, true, false, false, mockActiveCompactions);
+            CompactionManager.instance.scrubOne(txn, IScrubber.options().skipCorrupted().build(), mockActiveCompactions);
 
             assertTrue(mockActiveCompactions.finished);
             assertEquals(mockActiveCompactions.holder.getCompactionInfo().getSSTables(), Sets.newHashSet(sstable));

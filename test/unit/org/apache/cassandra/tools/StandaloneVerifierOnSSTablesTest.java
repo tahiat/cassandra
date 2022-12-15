@@ -34,6 +34,7 @@ import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.io.sstable.Component;
+import org.apache.cassandra.io.sstable.VerifyTest;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.big.BigTableVerifier;
 import org.apache.cassandra.schema.KeyspaceParams;
@@ -49,12 +50,12 @@ import static org.junit.Assert.assertEquals;
  * Class that tests tables for {@link StandaloneVerifier} by updating using {@link SchemaLoader}
  * Similar in vein to other {@link SchemaLoader} type tests, as well as {@link StandaloneUpgraderOnSStablesTest}.
  * Since the tool mainly exercises the {@link BigTableVerifier}, we elect to
- * not run every conceivable option as many tests are already covered by {@link org.apache.cassandra.db.VerifyTest}.
+ * not run every conceivable option as many tests are already covered by {@link VerifyTest}.
  * 
  * Note: the complete coverage is composed of:
  * - {@link StandaloneVerifierOnSSTablesTest}
  * - {@link StandaloneVerifierTest}
- * - {@link org.apache.cassandra.db.VerifyTest}
+ * - {@link VerifyTest}
  */
 public class StandaloneVerifierOnSSTablesTest extends OfflineToolUtils
 {

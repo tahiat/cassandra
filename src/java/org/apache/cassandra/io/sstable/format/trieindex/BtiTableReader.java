@@ -567,13 +567,6 @@ public class BtiTableReader extends SSTableReader
     }
 
     @Override
-    public void setupOnline()
-    {
-        final ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(metadata().id);
-        setCrcCheckChance(cfs.getCrcCheckChance());
-    }
-
-    @Override
     public SSTableReader cloneAndReplace(IFilter newBloomFilter)
     {
         return cloneInternal(first, openReason, newBloomFilter);
@@ -658,7 +651,7 @@ public class BtiTableReader extends SSTableReader
     @Override
     public IScrubber getScrubber(LifecycleTransaction transaction, OutputHandler outputHandler, IScrubber.Options options)
     {
-        ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(metadata().id);
+        ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(metadata());
         Preconditions.checkArgument(transaction.originals().contains(this));
         return new BtiTableScrubber(cfs, transaction, outputHandler, options);
     }
@@ -666,7 +659,7 @@ public class BtiTableReader extends SSTableReader
     @Override
     public IVerifier getVerifier(OutputHandler outputHandler, boolean isOffline, IVerifier.Options options)
     {
-        ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(metadata().id);
+        ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(metadata());
         return new BtiTableVerifier(cfs, this, isOffline, options);
     }
 }

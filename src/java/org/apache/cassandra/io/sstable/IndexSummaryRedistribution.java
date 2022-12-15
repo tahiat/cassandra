@@ -28,15 +28,15 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.annotations.VisibleForTesting;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.compaction.CompactionInfo;
+import org.apache.cassandra.db.compaction.CompactionInfo.Unit;
 import org.apache.cassandra.db.compaction.CompactionInterruptedException;
 import org.apache.cassandra.db.compaction.OperationType;
-import org.apache.cassandra.db.compaction.CompactionInfo.Unit;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.metrics.StorageMetrics;
@@ -83,13 +83,15 @@ public class IndexSummaryRedistribution extends CompactionInfo.Holder
 
     private static <T extends SSTableReader & IndexSummarySupport<T>> List<T> getIndexSummarySupportingAndCloseOthers(LifecycleTransaction txn) {
         List<T> filtered = new ArrayList<>();
+        List<SSTableReader> cancels = new ArrayList<>();
         for (SSTableReader sstable : txn.originals())
         {
             if (sstable instanceof IndexSummarySupport<?>)
                 filtered.add((T) sstable);
             else
-                txn.cancel(sstable);
+                cancels.add(sstable);
         }
+        txn.cancel(cancels);
         return filtered;
     }
 

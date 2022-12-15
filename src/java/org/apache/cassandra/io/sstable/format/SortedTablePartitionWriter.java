@@ -65,7 +65,7 @@ public abstract class SortedTablePartitionWriter implements AutoCloseable
         COMPLETED
     }
 
-    State state = State.COMPLETED;
+    State state = State.AWAITING_PARTITION_HEADER;
 
     protected SortedTablePartitionWriter(SerializationHeader header, SequentialWriter writer, Version version)
     {
@@ -78,8 +78,6 @@ public abstract class SortedTablePartitionWriter implements AutoCloseable
 
     protected void reset()
     {
-        checkState(state == State.COMPLETED);
-
         this.initialPosition = writer.position();
         this.startPosition = -1;
         this.previousRowStart = 0;
@@ -98,9 +96,11 @@ public abstract class SortedTablePartitionWriter implements AutoCloseable
 
     public void start(DecoratedKey key, DeletionTime partitionLevelDeletion) throws IOException
     {
-        reset();
+        if (state == State.COMPLETED)
+            reset();
 
         checkState(state == State.AWAITING_PARTITION_HEADER);
+
         ByteBufferUtil.writeWithShortLength(key.getKey(), writer);
         DeletionTime.serializer.serialize(partitionLevelDeletion, writer);
 

@@ -28,6 +28,8 @@ import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.cache.InstrumentingCache;
+import org.apache.cassandra.cache.KeyCacheKey;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.filter.ClusteringIndexFilter;
 import org.apache.cassandra.db.filter.ColumnFilter;
@@ -53,6 +55,7 @@ import org.apache.cassandra.io.util.FileHandle;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.io.util.RandomAccessReader;
 import org.apache.cassandra.schema.Schema;
+import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.IFilter;
@@ -455,6 +458,19 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
         }
     }
 
+    @Override
+    public void setupOnline()
+    {
+        // under normal operation we can do this at any time, but SSTR is also used outside C* proper,
+        // e.g. by BulkLoader, which does not initialize the cache.  As a kludge, we set up the cache
+        // here when we know we're being wired into the rest of the server infrastructure.
+        InstrumentingCache<KeyCacheKey, AbstractRowIndexEntry> maybeKeyCache = CacheService.instance.keyCache;
+        if (maybeKeyCache.getCapacity() > 0)
+            keyCache = maybeKeyCache;
+
+        super.setupOnline();
+    }
+
     /**
      * @return An estimate of the number of keys in this SSTable based on the index summary.
      */
@@ -507,15 +523,15 @@ public class BigTableReader extends SSTableReader implements IndexSummarySupport
     @Override
     public IScrubber getScrubber(LifecycleTransaction transaction, OutputHandler outputHandler, IScrubber.Options options)
     {
-        ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(metadata().id);
-        Preconditions.checkArgument(transaction.originals().contains(this));
+        ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(metadata());
+        Preconditions.checkArgument(transaction.originals().size() == 1 && transaction.originals().contains(this));
         return new BigTableScrubber(cfs, transaction, outputHandler, options);
     }
 
     @Override
     public IVerifier getVerifier(OutputHandler outputHandler, boolean isOffline, IVerifier.Options options)
     {
-        ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(metadata().id);
+        ColumnFamilyStore cfs = Schema.instance.getColumnFamilyStoreInstance(metadata());
         return new BigTableVerifier(cfs, this, outputHandler, isOffline, options);
     }
 

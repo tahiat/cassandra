@@ -36,6 +36,7 @@ import java.util.stream.Stream;
 
 import javax.annotation.Nonnull;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 
 import org.apache.cassandra.io.FSReadError;
@@ -226,7 +227,8 @@ public final class Throwables
         {
             try
             {
-                closeable.close();
+                if (closeable != null)
+                    closeable.close();
             }
             catch (Throwable t)
             {
@@ -340,5 +342,11 @@ public final class Throwables
         }
     }
 
+    @VisibleForTesting
+    public static void assertAnyCause(Throwable err, Class<? extends Throwable> cause)
+    {
+        if (!anyCauseMatches(err, cause::isInstance))
+            throw new AssertionError("The exception is not caused by " + cause.getName(), err);
+    }
 
 }

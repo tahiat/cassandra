@@ -58,10 +58,16 @@ public class BtiTableScrubber extends SortedTableScrubber<BtiTableReader> implem
             outputHandler.warn("Missing index component");
         }
 
-
-        this.indexIterator = hasIndexFile
-                             ? openIndexIterator()
-                             : null;
+        try
+        {
+            this.indexIterator = hasIndexFile
+                                 ? openIndexIterator()
+                                 : null;
+        }
+        catch (RuntimeException ex)
+        {
+            outputHandler.warn("Detected corruption in the index file - cannot open index iterator", ex);
+        }
     }
 
     private ScrubPartitionIterator openIndexIterator()
@@ -179,7 +185,7 @@ public class BtiTableScrubber extends SortedTableScrubber<BtiTableReader> implem
                     && (key == null || !key.getKey().equals(currentIndexKey) || dataStart != dataStartFromIndex))
                 {
 
-// position where the row should start in a data file (right after the partition key)
+                    // position where the row should start in a data file (right after the partition key)
                     long rowStartFromIndex = dataStartFromIndex + TypeSizes.SHORT_SIZE + currentIndexKey.remaining();
                     outputHandler.output("Retrying from partition index; data is %s bytes starting at %s",
                                          dataSizeFromIndex, rowStartFromIndex);

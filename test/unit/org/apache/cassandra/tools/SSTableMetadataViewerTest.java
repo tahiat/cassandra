@@ -209,10 +209,10 @@ public class SSTableMetadataViewerTest extends OfflineToolUtils
               .stream()
               .forEach(arg -> {
                   ToolResult tool = ToolRunner.invokeClass(SSTableMetadataViewer.class, arg, sstable);
+                  tool.assertOnExitCode();
                   Assertions.assertThat(tool.getStdout()).contains("Widest Partitions");
                   Assertions.assertThat(tool.getStdout()).contains(sstable.replaceAll("-Data\\.db$", ""));
                   assertTrue("Arg: [" + arg + "]\n" + tool.getCleanedStderr(), tool.getCleanedStderr().isEmpty());
-                  assertEquals(0, tool.getExitCode());
               });
     }
 

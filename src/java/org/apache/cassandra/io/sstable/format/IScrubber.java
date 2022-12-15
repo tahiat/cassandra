@@ -36,6 +36,10 @@ public interface IScrubber extends Closeable
     @VisibleForTesting
     ScrubResult scrubWithResult();
 
+    static Options.Builder options()
+    {
+        return new Options.Builder();
+    }
 
     final class ScrubResult
     {

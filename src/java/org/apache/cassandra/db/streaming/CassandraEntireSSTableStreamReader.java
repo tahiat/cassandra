@@ -31,7 +31,6 @@ import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTableMultiWriter;
-import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.apache.cassandra.io.sstable.SSTableZeroCopyWriter;
 import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.io.util.DataInputPlus;
@@ -60,9 +59,6 @@ public class CassandraEntireSSTableStreamReader implements IStreamReader
 
     public CassandraEntireSSTableStreamReader(StreamMessageHeader messageHeader, CassandraStreamHeader streamHeader, StreamSession session)
     {
-        if (streamHeader.format != SSTableFormat.Type.BIG)
-            throw new AssertionError("Unsupported SSTable format " + streamHeader.format);
-
         if (session.getPendingRepair() != null)
         {
             // we should only ever be streaming pending repair sstables if the session has a pending repair id
@@ -84,7 +80,7 @@ public class CassandraEntireSSTableStreamReader implements IStreamReader
      */
     @SuppressWarnings("resource") // input needs to remain open, streams on top of it can't be closed
     @Override
-    public SSTableMultiWriter read(DataInputPlus in) throws Throwable
+    public SSTableMultiWriter read(DataInputPlus in) throws IOException
     {
         ColumnFamilyStore cfs = ColumnFamilyStore.getIfExists(tableId);
         if (cfs == null)
@@ -122,7 +118,7 @@ public class CassandraEntireSSTableStreamReader implements IStreamReader
                              prettyPrintMemory(totalSize));
 
                 writer.writeComponent(component.type, in, length);
-                session.progress(writer.descriptor.filenameFor(component), ProgressInfo.Direction.IN, length, length);
+                session.progress(writer.descriptor.fileFor(component).toString(), ProgressInfo.Direction.IN, length, length);
                 bytesRead += length;
 
                 logger.debug("[Stream #{}] Finished receiving {} component from {}, componentSize = {}, readBytes = {}, totalSize = {}",
@@ -145,7 +141,11 @@ public class CassandraEntireSSTableStreamReader implements IStreamReader
         {
             logger.error("[Stream {}] Error while reading sstable from stream for table = {}", session.planId(), cfs.metadata(), e);
             if (writer != null)
-                e = writer.abort(e);
+            {
+                Throwable e2 = writer.abort(null);
+                if (e2 != null)
+                    e.addSuppressed(e2);
+            }
             throw e;
         }
     }

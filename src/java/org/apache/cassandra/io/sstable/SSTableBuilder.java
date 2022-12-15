@@ -19,10 +19,8 @@
 package org.apache.cassandra.io.sstable;
 
 import java.util.Collection;
-import java.util.Objects;
 import java.util.Set;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 
 import org.apache.cassandra.cache.ChunkCache;

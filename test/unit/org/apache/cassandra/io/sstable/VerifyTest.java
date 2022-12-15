@@ -7,16 +7,15 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
-package org.apache.cassandra.db;
+package org.apache.cassandra.io.sstable;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -32,17 +31,25 @@ import java.util.zip.CheckedInputStream;
 
 import com.google.common.base.Charsets;
 import org.apache.commons.lang3.StringUtils;
+import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.UpdateBuilder;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.batchlog.Batch;
 import org.apache.cassandra.batchlog.BatchlogManager;
 import org.apache.cassandra.cache.ChunkCache;
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.db.BufferDecoratedKey;
+import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.Keyspace;
+import org.apache.cassandra.db.PartitionPosition;
 import org.apache.cassandra.db.compaction.CompactionManager;
-import org.apache.cassandra.io.sstable.IVerifier;
-import org.apache.cassandra.io.sstable.format.big.BigTableVerifier;
 import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.cassandra.dht.ByteOrderedPartitioner;
 import org.apache.cassandra.dht.Murmur3Partitioner;
@@ -51,9 +58,9 @@ import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.exceptions.WriteTimeoutException;
 import org.apache.cassandra.io.FSWriteError;
-import org.apache.cassandra.io.sstable.Component;
-import org.apache.cassandra.io.sstable.CorruptSSTableException;
+import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.io.sstable.format.big.BigTableVerifier;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.io.util.FileInputStreamPlus;
 import org.apache.cassandra.io.util.FileUtils;
@@ -78,7 +85,7 @@ import static org.junit.Assert.fail;
 
 /**
  * Test for {@link BigTableVerifier}.
- * 
+ * <p>
  * Note: the complete coverage is composed of:
  * - {@link org.apache.cassandra.tools.StandaloneVerifierOnSSTablesTest}
  * - {@link org.apache.cassandra.tools.StandaloneVerifierTest}
@@ -107,6 +114,8 @@ public class VerifyTest
     public static void defineSchema() throws ConfigurationException
     {
         CompressionParams compressionParameters = CompressionParams.snappy(32768);
+        DatabaseDescriptor.daemonInitialization();
+        DatabaseDescriptor.setColumnIndexSize(0);
 
         loadSchema();
         createKeyspace(KEYSPACE,
@@ -321,16 +330,21 @@ public class VerifyTest
             verifier.verify();
             fail("Expected a CorruptSSTableException to be thrown");
         }
-        catch (CorruptSSTableException err) {}
+        catch (CorruptSSTableException err)
+        {
+        }
 
         try (IVerifier verifier = sstable.getVerifier(new OutputHandler.LogOutput(), false, IVerifier.options().invokeDiskFailurePolicy(false).build()))
         {
             verifier.verify();
             fail("Expected a RuntimeException to be thrown");
         }
-        catch (RuntimeException err) {}
+        catch (RuntimeException err)
+        {
+        }
     }
 
+    private final static Logger logger = LoggerFactory.getLogger(VerifyTest.class);
 
     @Test
     public void testVerifyCorruptRowCorrectDigest() throws IOException, WriteTimeoutException
@@ -351,10 +365,10 @@ public class VerifyTest
         long startPosition = row0Start < row1Start ? row0Start : row1Start;
         long endPosition = row0Start < row1Start ? row1Start : row0Start;
 
-        FileChannel file = new File(sstable.getFilename()).newReadWriteChannel();
-        file.position(startPosition);
-        file.write(ByteBufferUtil.bytes(StringUtils.repeat('z', 2)));
-        file.close();
+        try (FileChannel file = new File(sstable.getFilename()).newReadWriteChannel()) {
+            file.position(startPosition);
+            file.write(ByteBufferUtil.bytes(StringUtils.repeat('z', 2)));
+        }
         if (ChunkCache.instance != null)
             ChunkCache.instance.invalidateFile(sstable.getFilename());
 
@@ -370,6 +384,7 @@ public class VerifyTest
             }
             catch (CorruptSSTableException err)
             {
+                logger.error("Unexpected exception", err);
                 fail("Simple verify should have succeeded as digest matched");
             }
         }
@@ -379,7 +394,6 @@ public class VerifyTest
             try
             {
                 verifier.verify();
-
             }
             catch (CorruptSSTableException err)
             {
@@ -413,15 +427,20 @@ public class VerifyTest
             fail("Expected a CorruptSSTableException to be thrown");
         }
         catch (CorruptSSTableException err)
-        {}
+        {
+        }
         try (IVerifier verifier = sstable.getVerifier(new OutputHandler.LogOutput(), false, IVerifier.options().invokeDiskFailurePolicy(false).build()))
         {
             verifier.verify();
             fail("Expected a RuntimeException to be thrown");
         }
-        catch (CorruptSSTableException err) { fail("wrong exception thrown"); }
+        catch (CorruptSSTableException err)
+        {
+            fail("wrong exception thrown");
+        }
         catch (RuntimeException err)
-        {}
+        {
+        }
     }
 
     @Test
@@ -453,7 +472,8 @@ public class VerifyTest
             fail("Expected a CorruptSSTableException to be thrown");
         }
         catch (CorruptSSTableException err)
-        {}
+        {
+        }
 
         assertTrue(sstable.isRepaired());
 
@@ -464,7 +484,8 @@ public class VerifyTest
             fail("Expected a CorruptSSTableException to be thrown");
         }
         catch (CorruptSSTableException err)
-        {}
+        {
+        }
         assertFalse(sstable.isRepaired());
     }
 
@@ -490,7 +511,6 @@ public class VerifyTest
         {
             StorageService.instance.getTokenMetadata().clearUnsafe();
         }
-
     }
 
     @Test
@@ -522,15 +542,24 @@ public class VerifyTest
             fail("should be corrupt");
         }
         catch (CorruptSSTableException e)
-        {}
+        {
+        }
         assertFalse(sstable.isRepaired());
     }
 
     @Test
     public void testVerifyIndex() throws IOException
     {
-        testBrokenComponentHelper(Component.PRIMARY_INDEX);
+        if (SSTableFormat.Type.current() == SSTableFormat.Type.BIG)
+        {
+            testBrokenComponentHelper(Component.PRIMARY_INDEX);
+        }
+        else if (SSTableFormat.Type.current() == SSTableFormat.Type.BTI)
+        {
+            testBrokenComponentHelper(Component.PARTITION_INDEX);
+        }
     }
+
     @Test
     public void testVerifyBf() throws IOException
     {
@@ -540,6 +569,7 @@ public class VerifyTest
     @Test
     public void testVerifyIndexSummary() throws IOException
     {
+        Assume.assumeTrue(SSTableFormat.Type.current().info.supportedComponents().contains(Component.SUMMARY));
         testBrokenComponentHelper(Component.SUMMARY);
     }
 
@@ -557,7 +587,7 @@ public class VerifyTest
             verifier.verify(); //still not corrupt, should pass
         }
         String filenameToCorrupt = sstable.descriptor.filenameFor(componentToBreak);
-        try(FileChannel fileChannel = new File(filenameToCorrupt).newReadWriteChannel())
+        try (FileChannel fileChannel = new File(filenameToCorrupt).newReadWriteChannel())
         {
             fileChannel.truncate(3);
         }
@@ -567,7 +597,7 @@ public class VerifyTest
             verifier.verify();
             fail("should throw exception");
         }
-        catch(CorruptSSTableException e)
+        catch (CorruptSSTableException e)
         {
             //expected
         }
@@ -599,7 +629,9 @@ public class VerifyTest
             verifier.verify();
             fail("Expected a CorruptSSTableException to be thrown");
         }
-        catch (CorruptSSTableException err) {}
+        catch (CorruptSSTableException err)
+        {
+        }
 
         try (IVerifier verifier = sstable.getVerifier(new OutputHandler.LogOutput(), false, IVerifier.options().invokeDiskFailurePolicy(true).quick(true).build())) // with quick = true we don't verify the digest
         {
@@ -611,7 +643,9 @@ public class VerifyTest
             verifier.verify();
             fail("Expected a RuntimeException to be thrown");
         }
-        catch (CorruptSSTableException err) {}
+        catch (CorruptSSTableException err)
+        {
+        }
     }
 
     @Test
@@ -621,10 +655,10 @@ public class VerifyTest
         normalized.add(r(Long.MIN_VALUE, Long.MIN_VALUE + 1));
         normalized.add(r(Long.MIN_VALUE + 5, Long.MIN_VALUE + 6));
         normalized.add(r(Long.MIN_VALUE + 10, Long.MIN_VALUE + 11));
-        normalized.add(r(0,10));
-        normalized.add(r(10,11));
-        normalized.add(r(20,25));
-        normalized.add(r(26,200));
+        normalized.add(r(0, 10));
+        normalized.add(r(10, 11));
+        normalized.add(r(20, 25));
+        normalized.add(r(26, 200));
 
         BigTableVerifier.RangeOwnHelper roh = new BigTableVerifier.RangeOwnHelper(normalized);
 
@@ -649,7 +683,7 @@ public class VerifyTest
     public void testRangeOwnHelperBadToken()
     {
         List<Range<Token>> normalized = new ArrayList<>();
-        normalized.add(r(0,10));
+        normalized.add(r(0, 10));
         BigTableVerifier.RangeOwnHelper roh = new BigTableVerifier.RangeOwnHelper(normalized);
         roh.validate(dk(1));
         // call with smaller token to get exception
@@ -660,7 +694,7 @@ public class VerifyTest
     @Test
     public void testRangeOwnHelperNormalize()
     {
-        List<Range<Token>> normalized = Range.normalize(Collections.singletonList(r(0,0)));
+        List<Range<Token>> normalized = Range.normalize(Collections.singletonList(r(0, 0)));
         BigTableVerifier.RangeOwnHelper roh = new BigTableVerifier.RangeOwnHelper(normalized);
         roh.validate(dk(Long.MIN_VALUE));
         roh.validate(dk(0));
@@ -670,7 +704,7 @@ public class VerifyTest
     @Test
     public void testRangeOwnHelperNormalizeWrap()
     {
-        List<Range<Token>> normalized = Range.normalize(Collections.singletonList(r(Long.MAX_VALUE - 1000,Long.MIN_VALUE + 1000)));
+        List<Range<Token>> normalized = Range.normalize(Collections.singletonList(r(Long.MAX_VALUE - 1000, Long.MIN_VALUE + 1000)));
         BigTableVerifier.RangeOwnHelper roh = new BigTableVerifier.RangeOwnHelper(normalized);
         roh.validate(dk(Long.MIN_VALUE));
         roh.validate(dk(Long.MAX_VALUE));
@@ -736,7 +770,6 @@ public class VerifyTest
     }
 
 
-
     private DecoratedKey dk(long l)
     {
         return new BufferDecoratedKey(t(l), ByteBufferUtil.EMPTY_BYTE_BUFFER);
@@ -785,7 +818,8 @@ public class VerifyTest
             CRC32 checksum = new CRC32();
             CheckedInputStream cinStream = new CheckedInputStream(inputStream, checksum);
             byte[] b = new byte[128];
-            while (cinStream.read(b) >= 0) {
+            while (cinStream.read(b) >= 0)
+            {
             }
             return cinStream.getChecksum().getValue();
         }
@@ -810,7 +844,5 @@ public class VerifyTest
         {
             FileUtils.closeQuietly(out);
         }
-
     }
-
 }

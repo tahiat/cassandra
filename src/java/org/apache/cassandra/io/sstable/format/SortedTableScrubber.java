@@ -33,8 +33,12 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import javax.annotation.concurrent.NotThreadSafe;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.UnmodifiableIterator;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.ClusteringComparator;
 import org.apache.cassandra.db.ColumnFamilyStore;
@@ -56,6 +60,7 @@ import org.apache.cassandra.db.rows.Unfiltered;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.db.rows.UnfilteredRowIterators;
 import org.apache.cassandra.db.rows.WrappingUnfilteredRowIterator;
+import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.SSTableIdentityIterator;
 import org.apache.cassandra.io.sstable.SSTableRewriter;
 import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
@@ -75,6 +80,8 @@ import static org.apache.cassandra.utils.TimeUUID.Generator.nextTimeUUID;
 @NotThreadSafe
 public abstract class SortedTableScrubber<R extends SSTableReader> implements IScrubber
 {
+    private final static Logger logger = LoggerFactory.getLogger(SortedTableScrubber.class);
+
     protected final ColumnFamilyStore cfs;
     protected final LifecycleTransaction transaction;
     protected final File destination;
@@ -104,7 +111,20 @@ public abstract class SortedTableScrubber<R extends SSTableReader> implements IS
                                   Options options)
     {
         this.sstable = (R) transaction.onlyOne();
-        assert sstable.metadata().keyspace.equals(cfs.keyspace.getName()) && sstable.metadata().name.equals(cfs.name);
+        Preconditions.checkNotNull(sstable.metadata());
+        assert sstable.metadata().keyspace.equals(cfs.keyspace.getName());
+        if (!sstable.descriptor.cfname.equals(cfs.metadata().name))
+        {
+            logger.warn("Descriptor points to a different table {} than metadata {}", sstable.descriptor.cfname, cfs.metadata().name);
+        }
+        try
+        {
+            sstable.metadata().validateCompatibility(cfs.metadata());
+        }
+        catch (ConfigurationException ex)
+        {
+            logger.warn("Descriptor points to a different table {} than metadata {}", sstable.descriptor.cfname, cfs.metadata().name);
+        }
 
         this.cfs = cfs;
         this.transaction = transaction;

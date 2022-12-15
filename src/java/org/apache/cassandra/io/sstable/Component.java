@@ -141,6 +141,8 @@ public class Component
         switch (type)
         {
             case DATA:             return Component.DATA;
+            case PARTITION_INDEX:  return Component.PARTITION_INDEX;
+            case ROW_INDEX:        return Component.ROW_INDEX;
             case PRIMARY_INDEX:    return Component.PRIMARY_INDEX;
             case FILTER:           return Component.FILTER;
             case COMPRESSION_INFO: return Component.COMPRESSION_INFO;

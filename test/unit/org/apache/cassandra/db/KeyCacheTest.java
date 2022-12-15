@@ -45,6 +45,7 @@ import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.format.AbstractRowIndexEntry;
+import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.big.BigTableReader;
 import org.apache.cassandra.io.sstable.format.big.RowIndexEntry;
@@ -67,6 +68,8 @@ import static org.mockito.Mockito.mock;
 
 public class KeyCacheTest
 {
+    private static boolean cacheSupported;
+
     private static final String KEYSPACE1 = "KeyCacheTest1";
     private static final String KEYSPACE2 = "KeyCacheTest2";
     private static final String COLUMN_FAMILY1 = "Standard1";
@@ -86,6 +89,7 @@ public class KeyCacheTest
     @BeforeClass
     public static void defineSchema() throws ConfigurationException
     {
+        cacheSupported = SSTableFormat.Type.current() == SSTableFormat.Type.BIG;
         SchemaLoader.prepareServer();
         SchemaLoader.createKeyspace(KEYSPACE1,
                                     KeyspaceParams.simple(1),
@@ -387,7 +391,7 @@ public class KeyCacheTest
         // be zero after load.
         assertKeyCacheSize(numberOfRows, KEYSPACE1, columnFamily1);
         assertKeyCacheSize(numberOfRows, KEYSPACE2, columnFamily2);
-        assertEquals(numberOfRows * tables.size(), CacheService.instance.keyCache.size());
+        assertEquals(cacheSupported ? numberOfRows * tables.size() : 0, CacheService.instance.keyCache.size());
     }
 
     @SuppressWarnings({ "unchecked", "rawtypes" })
@@ -420,8 +424,16 @@ public class KeyCacheTest
 
         long keysLoaded = autoSavingCache.loadSaved();
         assertThat(keysLoaded, Matchers.lessThanOrEqualTo(maxExpectedKeyCache));
-        assertNotEquals(0, keysLoaded);
-        Mockito.verify(keyCacheSerializerSpy, Mockito.times(1)).cleanupAfterDeserialize();
+        if (cacheSupported)
+        {
+            assertNotEquals(0, keysLoaded);
+            Mockito.verify(keyCacheSerializerSpy, Mockito.times(1)).cleanupAfterDeserialize();
+        }
+        else
+        {
+            assertEquals(0, keysLoaded);
+            Mockito.verify(keyCacheSerializerSpy, Mockito.never()).cleanupAfterDeserialize();
+        }
     }
 
     private void createAndInvalidateCache(List<Pair<String, String>> tables, int numberOfRows) throws ExecutionException, InterruptedException
@@ -476,6 +488,6 @@ public class KeyCacheTest
             if (k.desc.ksname.equals(keyspace) && k.desc.cfname.equals(columnFamily))
                 size++;
         }
-        assertEquals(expected, size);
+        assertEquals(cacheSupported ? expected : 0, size);
     }
 }

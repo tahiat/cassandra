@@ -19,7 +19,10 @@ package org.apache.cassandra.io.sstable;
 
 
 import java.nio.ByteBuffer;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -27,7 +30,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Sets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,6 +50,7 @@ import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.TimeUUID;
 import org.apache.cassandra.utils.memory.HeapCloner;
 
+import static com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.cassandra.service.ActiveRepairService.NO_PENDING_REPAIR;
 import static org.apache.cassandra.service.ActiveRepairService.UNREPAIRED_SSTABLE;
 
@@ -67,6 +70,8 @@ public abstract class SSTable
 {
     static final Logger logger = LoggerFactory.getLogger(SSTable.class);
 
+    public final StackTraceElement[] creationSite = Thread.currentThread().getStackTrace();
+
     public static final int TOMBSTONE_HISTOGRAM_BIN_SIZE = 100;
     public static final int TOMBSTONE_HISTOGRAM_SPOOL_SIZE = 100000;
     public static final int TOMBSTONE_HISTOGRAM_TTL_ROUND_SECONDS = Integer.valueOf(System.getProperty("cassandra.streaminghistogram.roundseconds", "60"));
@@ -85,8 +90,8 @@ public abstract class SSTable
 
     public SSTable(SSTableBuilder<?, ?> builder)
     {
-        Preconditions.checkNotNull(builder.descriptor);
-        Preconditions.checkNotNull(builder.getComponents());
+        checkNotNull(builder.descriptor);
+        checkNotNull(builder.getComponents());
 
         this.descriptor = builder.descriptor;
         this.ioOptions = builder.getIOOptions();
@@ -98,44 +103,50 @@ public abstract class SSTable
 
     public static void rename(Descriptor tmpdesc, Descriptor newdesc, Set<Component> components)
     {
-        for (Component component : Sets.difference(components, Sets.newHashSet(Component.DATA, Component.SUMMARY)))
-        {
-            FileUtils.renameWithConfirm(tmpdesc.filenameFor(component), newdesc.filenameFor(component));
-        }
+        components.stream()
+                  .filter(c -> !newdesc.getFormat().generatedOnLoadComponents().contains(c))
+                  .filter(c -> !c.equals(Component.DATA))
+                  .forEach(c -> tmpdesc.fileFor(c).move(newdesc.fileFor(c)));
 
         // do -Data last because -Data present should mean the sstable was completely renamed before crash
-        FileUtils.renameWithConfirm(tmpdesc.filenameFor(Component.DATA), newdesc.filenameFor(Component.DATA));
+        tmpdesc.fileFor(Component.DATA).move(newdesc.fileFor(Component.DATA));
 
         // rename it without confirmation because summary can be available for loadNewSSTables but not for closeAndOpenReader
-        FileUtils.renameWithOutConfirm(tmpdesc.filenameFor(Component.SUMMARY), newdesc.filenameFor(Component.SUMMARY));
+        components.stream()
+                  .filter(c -> newdesc.getFormat().generatedOnLoadComponents().contains(c))
+                  .forEach(c -> tmpdesc.fileFor(c).tryMove(newdesc.fileFor(c)));
     }
 
     public static void copy(Descriptor tmpdesc, Descriptor newdesc, Set<Component> components)
     {
-        for (Component component : Sets.difference(components, Sets.newHashSet(Component.DATA, Component.SUMMARY)))
-        {
-            FileUtils.copyWithConfirm(tmpdesc.filenameFor(component), newdesc.filenameFor(component));
-        }
+        components.stream()
+                  .filter(c -> !newdesc.getFormat().generatedOnLoadComponents().contains(c))
+                  .filter(c -> !c.equals(Component.DATA))
+                  .forEach(c -> FileUtils.copyWithConfirm(tmpdesc.fileFor(c), newdesc.fileFor(c)));
 
         // do -Data last because -Data present should mean the sstable was completely copied before crash
-        FileUtils.copyWithConfirm(tmpdesc.filenameFor(Component.DATA), newdesc.filenameFor(Component.DATA));
+        FileUtils.copyWithConfirm(tmpdesc.fileFor(Component.DATA), newdesc.fileFor(Component.DATA));
 
         // copy it without confirmation because summary can be available for loadNewSSTables but not for closeAndOpenReader
-        FileUtils.copyWithOutConfirm(tmpdesc.filenameFor(Component.SUMMARY), newdesc.filenameFor(Component.SUMMARY));
+        components.stream()
+                  .filter(c -> newdesc.getFormat().generatedOnLoadComponents().contains(c))
+                  .forEach(c -> FileUtils.copyWithOutConfirm(tmpdesc.fileFor(c), newdesc.fileFor(c)));
     }
 
     public static void hardlink(Descriptor tmpdesc, Descriptor newdesc, Set<Component> components)
     {
-        for (Component component : Sets.difference(components, Sets.newHashSet(Component.DATA, Component.SUMMARY)))
-        {
-            FileUtils.createHardLinkWithConfirm(tmpdesc.filenameFor(component), newdesc.filenameFor(component));
-        }
+        components.stream()
+                  .filter(c -> !newdesc.getFormat().generatedOnLoadComponents().contains(c))
+                  .filter(c -> !c.equals(Component.DATA))
+                  .forEach(c -> FileUtils.createHardLinkWithConfirm(tmpdesc.fileFor(c), newdesc.fileFor(c)));
 
         // do -Data last because -Data present should mean the sstable was completely copied before crash
-        FileUtils.createHardLinkWithConfirm(tmpdesc.filenameFor(Component.DATA), newdesc.filenameFor(Component.DATA));
+        FileUtils.createHardLinkWithConfirm(tmpdesc.fileFor(Component.DATA), newdesc.fileFor(Component.DATA));
 
         // copy it without confirmation because summary can be available for loadNewSSTables but not for closeAndOpenReader
-        FileUtils.createHardLinkWithoutConfirm(tmpdesc.filenameFor(Component.SUMMARY), newdesc.filenameFor(Component.SUMMARY));
+        components.stream()
+                  .filter(c -> newdesc.getFormat().generatedOnLoadComponents().contains(c))
+                  .forEach(c -> FileUtils.createHardLinkWithoutConfirm(tmpdesc.fileFor(c), newdesc.fileFor(c)));
     }
 
     @VisibleForTesting

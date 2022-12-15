@@ -248,14 +248,7 @@ public class ToolRunner
         allArgs.add(klass);
         allArgs.addAll(Arrays.asList(args));
         
-        Supplier<Integer> runMe = new Supplier<Integer>()
-        {
-            @Override
-            public Integer get()
-            {
-                return runClassAsTool(klass, args);
-            }
-        };
+        Supplier<Integer> runMe = () -> runClassAsTool(klass, args);
 
         Pair<Integer, ToolResult> res = invokeSupplier(runMe, stdin);
         return new ToolResult(allArgs,

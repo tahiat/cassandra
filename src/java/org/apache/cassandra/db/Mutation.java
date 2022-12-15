@@ -83,7 +83,12 @@ public class Mutation implements IMutation, Supplier<Mutation>
 
     public Mutation(PartitionUpdate update)
     {
-        this(update.metadata().keyspace, update.partitionKey(), ImmutableMap.of(update.metadata().id, update), approxTime.now(), update.metadata().params.cdc);
+        this(update, approxTime.now());
+    }
+
+    public Mutation(PartitionUpdate update, long timestampOverride)
+    {
+        this(update.metadata().keyspace, update.partitionKey(), ImmutableMap.of(update.metadata().id, update), timestampOverride, update.metadata().params.cdc);
     }
 
     public Mutation(String keyspaceName, DecoratedKey key, ImmutableMap<TableId, PartitionUpdate> modifications, long approxCreatedAtNanos)

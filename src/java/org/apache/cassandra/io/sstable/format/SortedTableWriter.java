@@ -29,8 +29,11 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.config.Config;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.DeletionPurger;
 import org.apache.cassandra.db.DeletionTime;
+import org.apache.cassandra.db.guardrails.Guardrails;
 import org.apache.cassandra.db.lifecycle.LifecycleNewTracker;
+import org.apache.cassandra.db.rows.ComplexColumnData;
 import org.apache.cassandra.db.rows.PartitionSerializationException;
 import org.apache.cassandra.db.rows.RangeTombstoneBoundMarker;
 import org.apache.cassandra.db.rows.RangeTombstoneBoundaryMarker;
@@ -47,12 +50,16 @@ import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.io.util.DataPosition;
 import org.apache.cassandra.io.util.FileHandle;
 import org.apache.cassandra.io.util.SequentialWriter;
+import org.apache.cassandra.schema.ColumnMetadata;
+import org.apache.cassandra.schema.SchemaConstants;
 import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.FilterFactory;
 import org.apache.cassandra.utils.IFilter;
 import org.apache.cassandra.utils.Throwables;
 import org.apache.cassandra.utils.concurrent.Transactional;
+
+import static com.google.common.base.Preconditions.checkNotNull;
 
 public abstract class SortedTableWriter<P extends SortedTablePartitionWriter, RIE extends AbstractRowIndexEntry> extends SSTableWriter
 {
@@ -68,6 +75,9 @@ public abstract class SortedTableWriter<P extends SortedTablePartitionWriter, RI
     public SortedTableWriter(SortedTableWriterBuilder<RIE, P, ?, ?> builder, LifecycleNewTracker lifecycleNewTracker)
     {
         super(builder, lifecycleNewTracker);
+        checkNotNull(builder.getDataWriter());
+        checkNotNull(builder.getPartitionWriter());
+
         this.dataWriter = builder.getDataWriter();
         this.partitionWriter = builder.getPartitionWriter();
     }
@@ -93,13 +103,16 @@ public abstract class SortedTableWriter<P extends SortedTablePartitionWriter, RI
 
             startPartition(partition.partitionKey(), partition.partitionLevelDeletion());
 
+            AbstractRowIndexEntry indexEntry;
             if (header.hasStatic())
-                addStaticRow(partition.staticRow());
+                addStaticRow(partition.partitionKey(), partition.staticRow());
 
             while (partition.hasNext())
-                addUnfiltered(partition.next());
+                addUnfiltered(partition.partitionKey(), partition.next());
 
-            return endPartition(partition.partitionKey(), partition.partitionLevelDeletion());
+            indexEntry = endPartition(partition.partitionKey(), partition.partitionLevelDeletion());
+
+            return indexEntry;
         }
         catch (BufferOverflowException boe)
         {
@@ -135,8 +148,10 @@ public abstract class SortedTableWriter<P extends SortedTablePartitionWriter, RI
         onStartPartition(key);
     }
 
-    private void addStaticRow(Row row) throws IOException
+    private void addStaticRow(DecoratedKey key, Row row) throws IOException
     {
+        guardCollectionSize(key, row);
+
         partitionWriter.addStaticRow(row);
         if (!row.isEmpty())
             Rows.collectStats(row, metadataCollector);
@@ -144,11 +159,11 @@ public abstract class SortedTableWriter<P extends SortedTablePartitionWriter, RI
         onStaticRow(row);
     }
 
-    private void addUnfiltered(Unfiltered unfiltered) throws IOException
+    private void addUnfiltered(DecoratedKey key, Unfiltered unfiltered) throws IOException
     {
         if (unfiltered.isRow())
         {
-            addRow((Row) unfiltered);
+            addRow(key, (Row) unfiltered);
         }
         else
         {
@@ -157,8 +172,10 @@ public abstract class SortedTableWriter<P extends SortedTablePartitionWriter, RI
         }
     }
 
-    private void addRow(Row row) throws IOException
+    private void addRow(DecoratedKey key, Row row) throws IOException
     {
+        guardCollectionSize(key, row);
+
         partitionWriter.addUnfiltered(row);
         metadataCollector.updateClusteringValues(row.clustering());
         Rows.collectStats(row, metadataCollector);
@@ -246,6 +263,7 @@ public abstract class SortedTableWriter<P extends SortedTablePartitionWriter, RI
     public void resetAndTruncate()
     {
         dataWriter.resetAndTruncate(dataMark);
+        partitionWriter.reset();
     }
 
 
@@ -311,6 +329,44 @@ public abstract class SortedTableWriter<P extends SortedTablePartitionWriter, RI
         {
             String keyString = metadata().partitionKeyType.getString(key.getKey());
             logger.warn("Writing {} tombstones to {}/{}:{} in sstable {}", tombstoneCount, metadata.keyspace, metadata.name, keyString, getFilename());
+        }
+    }
+
+    private void guardCollectionSize(DecoratedKey partitionKey, Row row)
+    {
+        if (!Guardrails.collectionSize.enabled() && !Guardrails.itemsPerCollection.enabled())
+            return;
+
+        if (row.isEmpty() || SchemaConstants.isSystemKeyspace(metadata.keyspace))
+            return;
+
+        for (ColumnMetadata column : row.columns())
+        {
+            if (!column.type.isCollection() || !column.type.isMultiCell())
+                continue;
+
+            ComplexColumnData cells = row.getComplexColumnData(column);
+            if (cells == null)
+                continue;
+
+            ComplexColumnData liveCells = cells.purge(DeletionPurger.PURGE_ALL, FBUtilities.nowInSeconds());
+            if (liveCells == null)
+                continue;
+
+            int cellsSize = liveCells.dataSize();
+            int cellsCount = liveCells.cellsCount();
+
+            if (!Guardrails.collectionSize.triggersOn(cellsSize, null) &&
+                !Guardrails.itemsPerCollection.triggersOn(cellsCount, null))
+                continue;
+
+            String keyString = metadata.getLocal().primaryKeyAsCQLLiteral(partitionKey.getKey(), row.clustering());
+            String msg = String.format("%s in row %s in table %s",
+                                       column.name.toString(),
+                                       keyString,
+                                       metadata);
+            Guardrails.collectionSize.guard(cellsSize, msg, true, null);
+            Guardrails.itemsPerCollection.guard(cellsCount, msg, true, null);
         }
     }
 

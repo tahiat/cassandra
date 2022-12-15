@@ -27,6 +27,7 @@ import java.util.function.Consumer;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Sets;
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -48,6 +49,7 @@ import org.apache.cassandra.db.rows.*;
 import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.exceptions.ConfigurationException;
+import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.apache.cassandra.io.sstable.format.big.BigTableReader;
 import org.apache.cassandra.metrics.RestorableMeter;
 import org.apache.cassandra.schema.CachingParams;
@@ -84,6 +86,9 @@ public class IndexSummaryManagerTest
     @BeforeClass
     public static void defineSchema() throws ConfigurationException
     {
+        Assume.assumeTrue("This test make sense only if the default SSTable format support index summary",
+                          SSTableFormat.Type.current().info.supportedComponents().contains(Component.SUMMARY));
+
         SchemaLoader.prepareServer();
         SchemaLoader.createKeyspace(KEYSPACE1,
                                     KeyspaceParams.simple(1),

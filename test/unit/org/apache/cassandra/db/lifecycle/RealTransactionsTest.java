@@ -40,6 +40,7 @@ import org.apache.cassandra.io.sstable.CQLSSTableWriter;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTableRewriter;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
+import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.schema.Schema;
@@ -163,6 +164,7 @@ public class RealTransactionsTest extends SchemaLoader
                                           .setTableMetadataRef(metadata)
                                           .setSerializationHeader(SerializationHeader.make(cfs.metadata(), txn.originals()))
                                           .addFlushObserversForSecondaryIndexes(cfs.indexManager.listIndexes(), txn.opType())
+                                          .setMetadataCollector(new MetadataCollector(cfs.metadata().comparator))
                                           .addDefaultComponents()
                                           .build(txn));
                 while (ci.hasNext())

@@ -22,6 +22,7 @@ package org.apache.cassandra.cql3.validation.operations;
 import java.io.IOException;
 
 import org.apache.cassandra.Util;
+import org.apache.cassandra.io.sstable.format.IScrubber;
 import org.apache.cassandra.io.util.File;
 import org.junit.After;
 import org.junit.Before;
@@ -379,7 +380,7 @@ public class TTLTest extends CQLTester
 
         if (runScrub)
         {
-            cfs.scrub(true, false, true, reinsertOverflowedTTL, 1);
+            cfs.scrub(true, IScrubber.options().checkData().reinsertOverflowedTTLRows(reinsertOverflowedTTL).build(), 1);
 
             if (reinsertOverflowedTTL)
             {

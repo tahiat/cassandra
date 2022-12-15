@@ -22,6 +22,7 @@ import java.util.Set;
 
 import com.google.common.base.CharMatcher;
 
+import org.apache.cassandra.config.CassandraRelevantProperties;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.GaugeProvider;
 import org.apache.cassandra.io.sstable.format.big.BigFormat;
@@ -52,6 +53,10 @@ public interface SSTableFormat<R extends SSTableReader, W extends SSTableWriter>
 
     Set<Component> writeComponents();
 
+    Set<Component> supportedComponents();
+
+    Set<Component> generatedOnLoadComponents();
+
     AbstractRowIndexEntry.KeyCacheValueSerializer<?, ?> getKeyCacheValueSerializer();
 
     R cast(SSTableReader sstr);
@@ -71,7 +76,7 @@ public interface SSTableFormat<R extends SSTableReader, W extends SSTableWriter>
 
         public static Type current()
         {
-            return BIG;
+            return CassandraRelevantProperties.SSTABLE_FORMAT_DEFAULT.getEnum(true, Type.class);
         }
 
         Type(String name, SSTableFormat<?, ?> info)

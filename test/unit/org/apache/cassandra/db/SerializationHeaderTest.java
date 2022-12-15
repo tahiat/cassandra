@@ -19,6 +19,7 @@
 package org.apache.cassandra.db;
 
 import java.nio.ByteBuffer;
+import java.util.Collections;
 import java.util.concurrent.Callable;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -47,6 +48,7 @@ import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
 import org.apache.cassandra.io.sstable.format.big.BigFormat;
+import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.ColumnMetadata;
@@ -98,6 +100,8 @@ public class SerializationHeaderTest
                                                              .setTableMetadataRef(TableMetadataRef.forOfflineTools(schema))
                                                              .setKeyCount(1)
                                                              .setSerializationHeader(header)
+                                                             .setFlushObservers(Collections.emptyList())
+                                                             .setMetadataCollector(new MetadataCollector(schema.comparator))
                                                              .addDefaultComponents()
                                                              .build(txn))
                 {

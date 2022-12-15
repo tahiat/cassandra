@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.function.Consumer;
 
-import com.google.common.collect.ImmutableList;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,11 +44,13 @@ import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.io.util.SequentialWriter;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.EstimatedHistogram;
+import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.IFilter;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.Throwables;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static org.apache.cassandra.io.util.FileHandle.Builder.NO_LENGTH_OVERRIDE;
 import static org.apache.cassandra.utils.Clock.Global.currentTimeMillis;
 
 public class BigTableWriter extends SortedTableWriter<BigFormatPartitionWriter, RowIndexEntry>
@@ -64,6 +65,8 @@ public class BigTableWriter extends SortedTableWriter<BigFormatPartitionWriter, 
     public BigTableWriter(BigTableWriterBuilder builder, LifecycleNewTracker lifecycleNewTracker)
     {
         super(builder, lifecycleNewTracker);
+        checkNotNull(builder.getRowIndexEntrySerializer());
+        checkNotNull(builder.getIndexWriter());
 
         this.rowIndexEntrySerializer = builder.getRowIndexEntrySerializer();
         this.indexWriter = builder.getIndexWriter();
@@ -154,7 +157,7 @@ public class BigTableWriter extends SortedTableWriter<BigFormatPartitionWriter, 
                                         .withLengthOverride(boundary != null ? boundary.indexLength : -1)
                                         .complete();
             builder.setIndexFile(indexFile);
-            dataFile = openDataFile(boundary != null ? boundary.dataLength : -1, builder.getStatsMetadata());
+            dataFile = openDataFile(boundary != null ? boundary.dataLength : NO_LENGTH_OVERRIDE, builder.getStatsMetadata());
             builder.setDataFile(dataFile);
 
             return builder.build(true, true);
@@ -200,7 +203,7 @@ public class BigTableWriter extends SortedTableWriter<BigFormatPartitionWriter, 
     @Override
     protected SSTableWriter.TransactionalProxy txnProxy()
     {
-        return new TransactionalProxy(() -> ImmutableList.of(indexWriter, dataWriter));
+        return new TransactionalProxy(() -> FBUtilities.immutableListWithFilteredNulls(indexWriter, dataWriter));
     }
 
     /**

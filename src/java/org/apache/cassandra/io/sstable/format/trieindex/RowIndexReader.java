@@ -43,14 +43,14 @@ import org.apache.cassandra.utils.bytecomparable.ByteComparable;
  * and must be re-instantiated for every thread that needs access to the trie (its overhead is below that of a
  * RandomAccessReader).
  */
-class RowIndexReader extends Walker<RowIndexReader>
+public class RowIndexReader extends Walker<RowIndexReader>
 {
     private static final int FLAG_OPEN_MARKER = 8;
 
-    static class IndexInfo
+    public static class IndexInfo
     {
-        final long offset;
-        final DeletionTime openDeletion;
+        public final long offset;
+        public final DeletionTime openDeletion;
 
         IndexInfo(long offset, DeletionTime openDeletion)
         {

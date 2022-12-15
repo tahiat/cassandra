@@ -30,7 +30,6 @@ import java.util.function.Function;
 import java.util.function.LongPredicate;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
@@ -101,8 +100,8 @@ public abstract class SortedTableVerifier<R extends SSTableReader> implements IV
     protected void deserializeBloomFilter(SSTableReader sstable) throws IOException
     {
         IFilter filter = FilterComponent.load(sstable.descriptor);
-        Preconditions.checkState(filter != null);
-        filter.close();
+        if (filter != null)
+            filter.close();
     }
 
     public CompactionInfo.Holder getVerifyInfo()

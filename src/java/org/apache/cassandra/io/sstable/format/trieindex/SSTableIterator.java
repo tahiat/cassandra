@@ -54,7 +54,7 @@ class SSTableIterator extends AbstractSSTableIterator<AbstractRowIndexEntry>
     {
         return indexEntry.isIndexed()
              ? new ForwardIndexedReader(indexEntry, file, shouldCloseFile)
-             : new AbstractSSTableIterator.ForwardReader(file, shouldCloseFile);
+             : new ForwardReader(file, shouldCloseFile);
     }
 
     protected int nextSliceIndex()

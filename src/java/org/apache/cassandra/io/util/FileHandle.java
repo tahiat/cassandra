@@ -248,6 +248,8 @@ public class FileHandle extends SharedCloseableImpl
      */
     public static class Builder
     {
+        public static final long NO_LENGTH_OVERRIDE = -1;
+
         public final File file;
 
         private Function<File, ChannelProxy> channelProxyFactory = ChannelProxy::new;

@@ -20,14 +20,19 @@ package org.apache.cassandra.io.sstable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import com.google.common.collect.Sets;
-
-import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
@@ -38,7 +43,14 @@ import org.apache.cassandra.Util;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.cql3.Operator;
 import org.apache.cassandra.cql3.UntypedResultSet;
-import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.BufferDecoratedKey;
+import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.Keyspace;
+import org.apache.cassandra.db.ReadCommand;
+import org.apache.cassandra.db.ReadExecutionController;
+import org.apache.cassandra.db.RowUpdateBuilder;
+import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
@@ -53,6 +65,7 @@ import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.index.Index;
 import org.apache.cassandra.io.FSReadError;
 import org.apache.cassandra.io.sstable.format.CompressionInfoComponent;
+import org.apache.cassandra.io.sstable.format.EmptySSTableScanner;
 import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.big.BigTableReader;
@@ -66,6 +79,8 @@ import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FilterFactory;
+import org.apache.cassandra.utils.PageAware;
+import org.assertj.core.api.Assertions;
 
 import static java.lang.String.format;
 import static org.apache.cassandra.ServerTestUtils.getLiveBigTableReaders;
@@ -74,6 +89,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeTrue;
 
 public class SSTableReaderTest
 {
@@ -162,7 +178,7 @@ public class SSTableReaderTest
     public void testSpannedIndexPositions() throws IOException
     {
         int originalMaxSegmentSize = MmappedRegions.MAX_SEGMENT_SIZE;
-        MmappedRegions.MAX_SEGMENT_SIZE = 40; // each index entry is ~11 bytes, so this will generate lots of segments
+        MmappedRegions.MAX_SEGMENT_SIZE = PageAware.PAGE_SIZE;
 
         try
         {
@@ -170,7 +186,7 @@ public class SSTableReaderTest
             partitioner = store.getPartitioner();
 
             // insert a bunch of data and compact to a single sstable
-            for (int j = 0; j < 100; j += 2)
+            for (int j = 0; j < 10000; j += 2)
             {
                 new RowUpdateBuilder(store.metadata(), j, String.valueOf(j))
                 .clustering("0")
@@ -183,7 +199,7 @@ public class SSTableReaderTest
 
             // check that all our keys are found correctly
             SSTableReader sstable = store.getLiveSSTables().iterator().next();
-            for (int j = 0; j < 100; j += 2)
+            for (int j = 0; j < 10000; j += 2)
             {
                 DecoratedKey dk = Util.dk(String.valueOf(j));
                 FileDataInput file = sstable.getFileDataInput(sstable.getPosition(dk, SSTableReader.Operator.EQ));
@@ -192,7 +208,7 @@ public class SSTableReaderTest
             }
 
             // check no false positives
-            for (int j = 1; j < 110; j += 2)
+            for (int j = 1; j < 11000; j += 2)
             {
                 DecoratedKey dk = Util.dk(String.valueOf(j));
                 assert sstable.getPosition(dk, SSTableReader.Operator.EQ) < 0;
@@ -360,6 +376,7 @@ public class SSTableReaderTest
         CompactionManager.instance.performMaximal(store, false);
 
         SSTableReader sstable = store.getLiveSSTables().iterator().next();
+        assumeTrue(sstable.isKeyCacheEnabled());
         // existing, non-cached key
         sstable.getPosition(k(2), SSTableReader.Operator.EQ);
         assertEquals(1, sstable.getKeyCacheRequest());
@@ -470,12 +487,11 @@ public class SSTableReaderTest
 
         executeInternal(format("ALTER TABLE \"%s\".\"%s\" WITH bloom_filter_fp_chance = 0.3", ks, cf));
 
-        File summaryFile = new File(desc.filenameFor(Component.SUMMARY));
-        Path bloomPath = new File(desc.filenameFor(Component.FILTER)).toPath();
-        Path summaryPath = summaryFile.toPath();
+        File bloomFile = desc.fileFor(Component.FILTER);
+        long bloomModified = bloomFile.lastModified();
 
-        long bloomModified = Files.getLastModifiedTime(bloomPath).toMillis();
-        long summaryModified = Files.getLastModifiedTime(summaryPath).toMillis();
+        File summaryFile = desc.getFormat().supportedComponents().contains(Component.SUMMARY) ? desc.fileFor(Component.SUMMARY) : null;
+        long summaryModified = summaryFile != null ? summaryFile.lastModified() : 0;
 
         TimeUnit.MILLISECONDS.sleep(1000); // sleep to ensure modified time will be different
 
@@ -483,8 +499,10 @@ public class SSTableReaderTest
         // check that bloomfilter/summary ARE NOT regenerated
         target = SSTableReader.openNoValidation(desc, store.metadata);
 
-        assertEquals(bloomModified, Files.getLastModifiedTime(bloomPath).toMillis());
-        assertEquals(summaryModified, Files.getLastModifiedTime(summaryPath).toMillis());
+        assertEquals(bloomModified, bloomFile.lastModified());
+
+        if (summaryFile != null)
+            assertEquals(summaryModified, summaryFile.lastModified());
 
         target.selfRef().release();
 
@@ -493,8 +511,9 @@ public class SSTableReaderTest
         components.remove(Component.FILTER);
         target = SSTableReader.openNoValidation(desc, components, store);
 
-        assertEquals(bloomModified, Files.getLastModifiedTime(bloomPath).toMillis());
-        assertEquals(summaryModified, Files.getLastModifiedTime(summaryPath).toMillis());
+        assertEquals(bloomModified, bloomFile.lastModified());
+        if (summaryFile != null)
+            assertEquals(summaryModified, summaryFile.lastModified());
         assertEquals(FilterFactory.AlwaysPresent, target.getBloomFilter());
 
         target.selfRef().release();
@@ -503,8 +522,9 @@ public class SSTableReaderTest
         // check that summary & bloomfilter are not regenerated when SSTable is opened and BFFP has been changed
         target = SSTableReader.open(desc, store.metadata);
 
-        assertEquals(bloomModified, Files.getLastModifiedTime(bloomPath).toMillis());
-        assertEquals(summaryModified, Files.getLastModifiedTime(summaryPath).toMillis());
+        assertEquals(bloomModified, bloomFile.lastModified());
+        if (summaryFile != null)
+            assertEquals(summaryModified, summaryFile.lastModified());
 
         target.selfRef().release();
 
@@ -515,36 +535,44 @@ public class SSTableReaderTest
 
         target = SSTableReader.open(desc, components, store.metadata);
 
-        assertTrue("Bloomfilter was not recreated", bloomModified < Files.getLastModifiedTime(bloomPath).toMillis());
-        assertTrue("Summary was not recreated", summaryModified < Files.getLastModifiedTime(summaryPath).toMillis());
+        assertTrue("Bloomfilter was not recreated", bloomModified < bloomFile.lastModified());
+        if (summaryFile != null)
+            assertTrue("Summary was not recreated", summaryModified < summaryFile.lastModified());
 
         target.selfRef().release();
 
         // check that only the summary is regenerated when it is deleted
         components.add(Component.FILTER);
-        summaryModified = Files.getLastModifiedTime(summaryPath).toMillis();
-        summaryFile.tryDelete();
+        if (summaryFile != null)
+        {
+            summaryModified = summaryFile.lastModified();
+            summaryFile.tryDelete();
+        }
 
         TimeUnit.MILLISECONDS.sleep(1000); // sleep to ensure modified time will be different
-        bloomModified = Files.getLastModifiedTime(bloomPath).toMillis();
+        bloomModified = bloomFile.lastModified();
 
         target = SSTableReader.open(desc, components, store.metadata);
 
-        assertEquals(bloomModified, Files.getLastModifiedTime(bloomPath).toMillis());
-        assertTrue("Summary was not recreated", summaryModified < Files.getLastModifiedTime(summaryPath).toMillis());
+        assertEquals(bloomModified, bloomFile.lastModified());
+        if (summaryFile != null)
+            assertTrue("Summary was not recreated", summaryModified < summaryFile.lastModified());
 
         target.selfRef().release();
 
         // check that summary and bloomfilter is not recreated when the INDEX is missing
-        components.add(Component.SUMMARY);
+        if (summaryFile != null)
+            components.add(Component.SUMMARY);
         components.remove(Component.PRIMARY_INDEX);
 
-        summaryModified = Files.getLastModifiedTime(summaryPath).toMillis();
+        if (summaryFile != null)
+            summaryModified = summaryFile.lastModified();
         target = SSTableReader.open(desc, components, store.metadata, false, false);
 
         TimeUnit.MILLISECONDS.sleep(1000); // sleep to ensure modified time will be different
-        assertEquals(bloomModified, Files.getLastModifiedTime(bloomPath).toMillis());
-        assertEquals(summaryModified, Files.getLastModifiedTime(summaryPath).toMillis());
+        assertEquals(bloomModified, bloomFile.lastModified());
+        if (summaryFile != null)
+            assertEquals(summaryModified, summaryFile.lastModified());
 
         target.selfRef().release();
     }
@@ -562,7 +590,7 @@ public class SSTableReaderTest
 
         Util.flush(store);
 
-        for(ColumnFamilyStore indexCfs : store.indexManager.getAllIndexColumnFamilyStores())
+        for (ColumnFamilyStore indexCfs : store.indexManager.getAllIndexColumnFamilyStores())
         {
             assert indexCfs.isIndex();
             SSTableReader sstable = indexCfs.getLiveSSTables().iterator().next();
@@ -578,7 +606,9 @@ public class SSTableReaderTest
         }
     }
 
-    /** see CASSANDRA-5407 */
+    /**
+     * see CASSANDRA-5407
+     */
     @Test
     public void testGetScannerForNoIntersectingRanges() throws Exception
     {
@@ -593,11 +623,15 @@ public class SSTableReaderTest
 
         Util.flush(store);
         boolean foundScanner = false;
-        for (SSTableReader s : store.getLiveSSTables())
+
+        Set<SSTableReader> liveSSTables = store.getLiveSSTables();
+        assertEquals("The table should have only one sstable", 1, liveSSTables.size());
+
+        for (SSTableReader s : liveSSTables)
         {
-            try (ISSTableScanner scanner = s.getScanner(new Range<Token>(t(0), t(1))))
+            try (ISSTableScanner scanner = s.getScanner(new Range<>(t(0), t(1))))
             {
-                scanner.next(); // throws exception pre 5407
+                Assertions.assertThat(scanner).isInstanceOf(EmptySSTableScanner.class);
                 foundScanner = true;
             }
         }
@@ -633,7 +667,7 @@ public class SSTableReaderTest
 
         SSTableReader sstable = store.getLiveSSTables().iterator().next();
         List<SSTableReader.PartitionPositionBounds> sections = sstable.getPositionsForRanges(ranges);
-        assert sections.size() == 1 : "Expected to find range in sstable" ;
+        assert sections.size() == 1 : "Expected to find range in sstable";
 
         // re-open the same sstable as it would be during bulk loading
         Set<Component> components = Sets.newHashSet(sstable.descriptor.getFormat().primaryComponents());
@@ -648,7 +682,7 @@ public class SSTableReaderTest
     @Test
     public void testIndexSummaryReplacement() throws IOException, ExecutionException, InterruptedException
     {
-        Assume.assumeTrue(SSTableFormat.Type.current() == SSTableFormat.Type.BIG);
+        assumeTrue(SSTableFormat.Type.current() == SSTableFormat.Type.BIG);
         ColumnFamilyStore store = discardSSTables(KEYSPACE1, CF_STANDARD_LOW_INDEX_INTERVAL); // index interval of 8, no key caching
 
         final int NUM_PARTITIONS = 512;
@@ -659,7 +693,6 @@ public class SSTableReaderTest
             .add("val", format("%3d", j))
             .build()
             .applyUnsafe();
-
         }
         Util.flush(store);
         CompactionManager.instance.performMaximal(store, false);
@@ -689,7 +722,7 @@ public class SSTableReaderTest
                 public void run()
                 {
                     Iterable<DecoratedKey> results = store.keySamples(
-                            new Range<>(sstable.getPartitioner().getMinimumToken(), sstable.getPartitioner().getToken(key)));
+                    new Range<>(sstable.getPartitioner().getMinimumToken(), sstable.getPartitioner().getToken(key)));
                     assertTrue(results.iterator().hasNext());
                 }
             }));
@@ -711,7 +744,7 @@ public class SSTableReaderTest
     @Test
     public void testIndexSummaryUpsampleAndReload() throws Exception
     {
-        Assume.assumeTrue(SSTableFormat.Type.current() == SSTableFormat.Type.BIG);
+        assumeTrue(SSTableFormat.Type.current() == SSTableFormat.Type.BIG);
         int originalMaxSegmentSize = MmappedRegions.MAX_SEGMENT_SIZE;
         MmappedRegions.MAX_SEGMENT_SIZE = 40; // each index entry is ~11 bytes, so this will generate lots of segments
 
@@ -737,7 +770,6 @@ public class SSTableReaderTest
             .add("val", format("%3d", j))
             .build()
             .applyUnsafe();
-
         }
         Util.flush(store);
         CompactionManager.instance.performMaximal(store, false);

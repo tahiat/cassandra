@@ -37,44 +37,66 @@ import org.apache.cassandra.io.sstable.format.Version;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.schema.TableMetadataRef;
 
+import static org.apache.cassandra.io.sstable.Component.COMPRESSION_INFO;
+import static org.apache.cassandra.io.sstable.Component.CRC;
+import static org.apache.cassandra.io.sstable.Component.DATA;
+import static org.apache.cassandra.io.sstable.Component.DIGEST;
+import static org.apache.cassandra.io.sstable.Component.FILTER;
+import static org.apache.cassandra.io.sstable.Component.PARTITION_INDEX;
+import static org.apache.cassandra.io.sstable.Component.ROW_INDEX;
+import static org.apache.cassandra.io.sstable.Component.STATS;
+import static org.apache.cassandra.io.sstable.Component.TOC;
+
 /**
  * Bigtable format with trie indices
  */
 public class BtiFormat implements SSTableFormat<BtiTableReader, BtiTableWriter>
 {
-    private final static Set<Component> STREAMING_COMPONENTS = ImmutableSet.of(Component.DATA,
-                                                                               Component.PARTITION_INDEX,
-                                                                               Component.ROW_INDEX,
-                                                                               Component.STATS,
-                                                                               Component.COMPRESSION_INFO,
-                                                                               Component.FILTER,
-                                                                               Component.DIGEST,
-                                                                               Component.CRC);
+    private final static Set<Component> STREAMING_COMPONENTS = ImmutableSet.of(DATA,
+                                                                               PARTITION_INDEX,
+                                                                               ROW_INDEX,
+                                                                               STATS,
+                                                                               COMPRESSION_INFO,
+                                                                               FILTER,
+                                                                               DIGEST,
+                                                                               CRC);
 
-    private final static Set<Component> PRIMARY_COMPONENTS = ImmutableSet.of(Component.DATA,
-                                                                             Component.PARTITION_INDEX);
+    private final static Set<Component> PRIMARY_COMPONENTS = ImmutableSet.of(DATA,
+                                                                             PARTITION_INDEX);
 
-    private final static Set<Component> MUTABLE_COMPONENTS = ImmutableSet.of(Component.STATS);
+    private final static Set<Component> MUTABLE_COMPONENTS = ImmutableSet.of(STATS);
 
-    private final static Set<Component> WRITE_COMPONENTS = ImmutableSet.of(Component.DATA,
-                                                                           Component.PARTITION_INDEX,
-                                                                           Component.ROW_INDEX,
-                                                                           Component.STATS,
-                                                                           Component.TOC,
-                                                                           Component.DIGEST);
+    private final static Set<Component> WRITE_COMPONENTS = ImmutableSet.of(DATA,
+                                                                           PARTITION_INDEX,
+                                                                           ROW_INDEX,
+                                                                           STATS,
+                                                                           TOC,
+                                                                           DIGEST);
 
-    private static final Set<Component> UPLOAD_COMPONENTS = ImmutableSet.of(Component.DATA,
-                                                                            Component.PARTITION_INDEX,
-                                                                            Component.ROW_INDEX,
-                                                                            Component.COMPRESSION_INFO,
-                                                                            Component.STATS);
+    private static final Set<Component> UPLOAD_COMPONENTS = ImmutableSet.of(DATA,
+                                                                            PARTITION_INDEX,
+                                                                            ROW_INDEX,
+                                                                            COMPRESSION_INFO,
+                                                                            STATS);
 
-    private static final Set<Component> BATCH_COMPONENTS = ImmutableSet.of(Component.DATA,
-                                                                           Component.PARTITION_INDEX,
-                                                                           Component.ROW_INDEX,
-                                                                           Component.COMPRESSION_INFO,
-                                                                           Component.FILTER,
-                                                                           Component.STATS);
+    private static final Set<Component> BATCH_COMPONENTS = ImmutableSet.of(DATA,
+                                                                           PARTITION_INDEX,
+                                                                           ROW_INDEX,
+                                                                           COMPRESSION_INFO,
+                                                                           FILTER,
+                                                                           STATS);
+
+    private final static Set<Component> SUPPORTED_COMPONENTS = ImmutableSet.of(DATA,
+                                                                               PARTITION_INDEX,
+                                                                               ROW_INDEX,
+                                                                               STATS,
+                                                                               COMPRESSION_INFO,
+                                                                               FILTER,
+                                                                               DIGEST,
+                                                                               CRC,
+                                                                               TOC);
+
+    private final static Set<Component> GENERATED_ON_LOAD_COMPONENTS = ImmutableSet.of(FILTER);
 
     public static final BtiFormat instance = new BtiFormat();
     public static final Version latestVersion = new TrieIndexVersion(TrieIndexVersion.current_version);
@@ -152,6 +174,18 @@ public class BtiFormat implements SSTableFormat<BtiTableReader, BtiTableWriter>
     public Set<Component> writeComponents()
     {
         return WRITE_COMPONENTS;
+    }
+
+    @Override
+    public Set<Component> supportedComponents()
+    {
+        return SUPPORTED_COMPONENTS;
+    }
+
+    @Override
+    public Set<Component> generatedOnLoadComponents()
+    {
+        return GENERATED_ON_LOAD_COMPONENTS;
     }
 
     @Override

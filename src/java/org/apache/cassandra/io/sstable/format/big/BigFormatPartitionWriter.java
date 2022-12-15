@@ -88,7 +88,6 @@ public class BigFormatPartitionWriter extends SortedTablePartitionWriter
         this.columnIndexCount = 0;
         this.indexSamplesSerializedSize = 0;
         this.indexSamples.clear();
-        this.openMarker = null;
 
         if (this.buffer != null)
             this.reusableBuffer = this.buffer;
@@ -128,7 +127,7 @@ public class BigFormatPartitionWriter extends SortedTablePartitionWriter
                                              lastClustering,
                                              startPosition,
                                              currentPosition() - startPosition,
-                                             openMarker);
+                                             !openMarker.isLive() ? openMarker : null);
 
         // indexOffsets is used for both shallow (ShallowIndexedEntry) and non-shallow IndexedEntry.
         // For shallow ones, we need it to serialize the offsts in finish().

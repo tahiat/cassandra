@@ -37,16 +37,18 @@ import org.apache.cassandra.io.sstable.format.AbstractRowIndexEntry;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableReader.OpenReason;
 import org.apache.cassandra.io.sstable.format.SortedTableWriter;
-import org.apache.cassandra.io.sstable.metadata.StatsMetadata;
 import org.apache.cassandra.io.util.DataPosition;
 import org.apache.cassandra.io.util.FileHandle;
 import org.apache.cassandra.io.util.SequentialWriter;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.Clock;
+import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.IFilter;
 import org.apache.cassandra.utils.JVMStabilityInspector;
 import org.apache.cassandra.utils.Throwables;
 import org.apache.cassandra.utils.concurrent.Transactional;
+
+import static org.apache.cassandra.io.util.FileHandle.Builder.NO_LENGTH_OVERRIDE;
 
 @VisibleForTesting
 public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter, TrieIndexEntry>
@@ -88,32 +90,32 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter, 
         return entry;
     }
 
-    private BtiTableReader openInternal(OpenReason openReason, Supplier<PartitionIndex> partitionIndexSupplier)
+    private BtiTableReader openInternal(OpenReason openReason, boolean isFinal, Supplier<PartitionIndex> partitionIndexSupplier)
     {
+        IFilter filter = null;
+        FileHandle dataFile = null;
         PartitionIndex partitionIndex = null;
         FileHandle rowIndexFile = null;
-        FileHandle dataFile = null;
-        IFilter filter = null;
-        StatsMetadata stats = statsMetadata();
+
+        BtiTableReaderBuilder builder = unbuildTo(new BtiTableReaderBuilder(descriptor)).setMaxDataAge(maxDataAge)
+                                                                                        .setSerializationHeader(header)
+                                                                                        .setOpenReason(openReason)
+                                                                                        .setFirst(first)
+                                                                                        .setLast(last);
 
         try
         {
+            builder.setStatsMetadata(statsMetadata());
+
             partitionIndex = partitionIndexSupplier.get();
             rowIndexFile = iwriter.rowIndexFHBuilder.complete();
-            dataFile = openDataFile(dataWriter.getLastFlushOffset(), stats);
+            dataFile = openDataFile(isFinal ? NO_LENGTH_OVERRIDE : dataWriter.getLastFlushOffset(), builder.getStatsMetadata());
             filter = iwriter.getFilterCopy();
 
-            BtiTableReaderBuilder builder = unbuildTo(new BtiTableReaderBuilder(descriptor));
-            return builder.setOpenReason(openReason)
-                          .setMaxDataAge(maxDataAge)
-                          .setSerializationHeader(header)
-                          .setStatsMetadata(stats)
-                          .setPartitionIndex(partitionIndex)
+            return builder.setPartitionIndex(partitionIndex)
                           .setRowIndexFile(rowIndexFile)
                           .setDataFile(dataFile)
                           .setFilter(filter)
-                          .setFirst(first)
-                          .setLast(last)
                           .build(true, true);
         }
         catch (RuntimeException | Error ex)
@@ -131,7 +133,7 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter, 
         iwriter.buildPartial(dataLength, partitionIndex ->
         {
             iwriter.rowIndexFHBuilder.withLengthOverride(iwriter.rowIndexWriter.getLastFlushOffset());
-            BtiTableReader reader = openInternal(OpenReason.EARLY, () -> partitionIndex);
+            BtiTableReader reader = openInternal(OpenReason.EARLY, false, () -> partitionIndex);
             callWhenReady.accept(reader);
         });
     }
@@ -156,12 +158,12 @@ public class BtiTableWriter extends SortedTableWriter<BtiFormatPartitionWriter, 
         if (maxDataAge < 0)
             maxDataAge = Clock.Global.currentTimeMillis();
 
-        return openInternal(openReason, iwriter::completedPartitionIndex);
+        return openInternal(openReason, true, iwriter::completedPartitionIndex);
     }
 
     protected TransactionalProxy txnProxy()
     {
-        return new TransactionalProxy(() -> ImmutableList.of(iwriter, dataWriter));
+        return new TransactionalProxy(() -> FBUtilities.immutableListWithFilteredNulls(iwriter, dataWriter));
     }
 
     private class TransactionalProxy extends SortedTableWriter<BtiFormatPartitionWriter, TrieIndexEntry>.TransactionalProxy

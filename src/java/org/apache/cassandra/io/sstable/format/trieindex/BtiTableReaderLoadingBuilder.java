@@ -92,7 +92,7 @@ public class BtiTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<Bt
             ValidationMetadata validationMetadata = statsComponent.validationMetadata();
             validatePartitioner(builder.getTableMetadataRef().getLocal(), validationMetadata);
 
-            boolean filterNeeded = online && builder.getComponents().contains(Component.FILTER);
+            boolean filterNeeded = online;
             if (filterNeeded)
                 builder.setFilter(loadFilter(validationMetadata));
             boolean rebuildFilter = filterNeeded && builder.getFilter() == null;
@@ -144,6 +144,8 @@ public class BtiTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<Bt
             {
                 DecoratedKey key = tableMetadataRef.getLocal().partitioner.decorateKey(keyReader.key());
                 bf.add(key);
+
+                keyReader.advance();
             }
         }
         catch (IOException | RuntimeException | Error ex)
