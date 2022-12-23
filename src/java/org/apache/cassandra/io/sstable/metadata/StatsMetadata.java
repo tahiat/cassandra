@@ -28,6 +28,7 @@ import org.apache.commons.lang3.builder.HashCodeBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.db.rows.Cell;
 import org.apache.cassandra.db.rows.EncodingStats;
 import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.db.commitlog.CommitLogPosition;
@@ -65,6 +66,17 @@ public class StatsMetadata extends MetadataComponent
     public final List<ByteBuffer> minClusteringValues;
     public final List<ByteBuffer> maxClusteringValues;
     public final boolean hasLegacyCounterShards;
+    /**
+     * This boolean is used as an approximation of whether a given key can be guaranteed not to have partition
+     * deletions in this sstable. Obviously, this is pretty imprecise: a single partition deletion in the sstable
+     * means we have to assume _any_ key may have a partition deletion. This is still likely useful as workloads that
+     * does not use partition level deletions, or only very rarely, are probably not that rare.
+     *
+     * TODO we could replace this by a small bloom-filter instead; the only downside being that we'd have to care about
+     *  the size of this bloom filters not getting out of hands, and it's a tiny bit unclear if it's worth the added
+     *  complexity.
+     */
+    public final boolean hasPartitionLevelDeletions;
     public final long repairedAt;
     public final long totalColumnsSet;
     public final long totalRows;
@@ -89,6 +101,7 @@ public class StatsMetadata extends MetadataComponent
                          List<ByteBuffer> minClusteringValues,
                          List<ByteBuffer> maxClusteringValues,
                          boolean hasLegacyCounterShards,
+                         boolean hasPartitionLevelDeletions,
                          long repairedAt,
                          long totalColumnsSet,
                          long totalRows,
@@ -111,6 +124,7 @@ public class StatsMetadata extends MetadataComponent
         this.minClusteringValues = minClusteringValues;
         this.maxClusteringValues = maxClusteringValues;
         this.hasLegacyCounterShards = hasLegacyCounterShards;
+        this.hasPartitionLevelDeletions = hasPartitionLevelDeletions;
         this.repairedAt = repairedAt;
         this.totalColumnsSet = totalColumnsSet;
         this.totalRows = totalRows;
@@ -166,6 +180,7 @@ public class StatsMetadata extends MetadataComponent
                                  minClusteringValues,
                                  maxClusteringValues,
                                  hasLegacyCounterShards,
+                                 hasPartitionLevelDeletions,
                                  repairedAt,
                                  totalColumnsSet,
                                  totalRows,
@@ -191,6 +206,7 @@ public class StatsMetadata extends MetadataComponent
                                  minClusteringValues,
                                  maxClusteringValues,
                                  hasLegacyCounterShards,
+                                 hasPartitionLevelDeletions,
                                  newRepairedAt,
                                  totalColumnsSet,
                                  totalRows,
@@ -223,6 +239,7 @@ public class StatsMetadata extends MetadataComponent
                        .append(maxClusteringValues, that.maxClusteringValues)
                        .append(minClusteringValues, that.minClusteringValues)
                        .append(hasLegacyCounterShards, that.hasLegacyCounterShards)
+                       .append(hasPartitionLevelDeletions, that.hasPartitionLevelDeletions)
                        .append(totalColumnsSet, that.totalColumnsSet)
                        .append(totalRows, that.totalRows)
                        .append(originatingHostId, that.originatingHostId)
@@ -250,6 +267,7 @@ public class StatsMetadata extends MetadataComponent
                        .append(maxClusteringValues)
                        .append(minClusteringValues)
                        .append(hasLegacyCounterShards)
+                       .append(hasPartitionLevelDeletions)
                        .append(totalColumnsSet)
                        .append(totalRows)
                        .append(originatingHostId)
@@ -296,6 +314,9 @@ public class StatsMetadata extends MetadataComponent
             {
                 size += TypeSizes.sizeof(component.isTransient);
             }
+
+            if (version.hasPartitionLevelDeletionsPresenceMarker())
+                size += TypeSizes.sizeof(component.hasPartitionLevelDeletions);
 
             if (version.hasOriginatingHostId())
             {
@@ -355,6 +376,9 @@ public class StatsMetadata extends MetadataComponent
             {
                 out.writeBoolean(component.isTransient);
             }
+
+            if (version.hasPartitionLevelDeletionsPresenceMarker())
+                out.writeBoolean(component.hasPartitionLevelDeletions);
 
             if (version.hasOriginatingHostId())
             {
@@ -448,6 +472,12 @@ public class StatsMetadata extends MetadataComponent
 
             boolean isTransient = version.hasIsTransient() && in.readBoolean();
 
+            // If not recorded, the only time we can guarantee there is no partition level deletion is if there is no
+            // deletion at all. Otherwise, we have to assume there may be some.
+            boolean hasPartitionLevelDeletions = version.hasPartitionLevelDeletionsPresenceMarker()
+                                                 ? in.readBoolean()
+                                                 : minLocalDeletionTime != Cell.NO_DELETION_TIME;
+
             UUID originatingHostId = null;
             if (version.hasOriginatingHostId() && in.readByte() != 0)
                 originatingHostId = UUIDSerializer.serializer.deserialize(in, 0);
@@ -467,6 +497,7 @@ public class StatsMetadata extends MetadataComponent
                                      minClusteringValues,
                                      maxClusteringValues,
                                      hasLegacyCounterShards,
+                                     hasPartitionLevelDeletions,
                                      repairedAt,
                                      totalColumnsSet,
                                      totalRows,

@@ -127,7 +127,6 @@ public class BtiFormat implements SSTableFormat<BtiTableReader, BtiTableWriter>
         return new TrieIndexVersion(version);
     }
 
-
     @Override
     public SSTableWriter.Factory<BtiTableWriter, BtiTableWriterBuilder> getWriterFactory()
     {
@@ -260,20 +259,19 @@ public class BtiFormat implements SSTableFormat<BtiTableReader, BtiTableWriter>
         //                   sstable version.
         // ac (DSE 6.0.11, 6.7.6): corrected sstable min/max clustering (DB-3691/CASSANDRA-14861)
         // ad (DSE 6.0.14, 6.7.11): added hostId of the node from which the sstable originated (DB-4629)
-        // b  (DSE early 6.8 "LABS") has some of 6.8 features but not all
         // ba (DSE 6.8): encrypted indices and metadata
         //               new BloomFilter serialization format
         //               add incremental NodeSync information to metadata
         //               improved min/max clustering representation
         //               presence marker for partition level deletions
         // bb (DSE 6.8.5): added hostId of the node from which the sstable originated (DB-4629)
-        // ca (DSE-DB aka Stargazer based on OSS 4.0): bb fields without maxColumnValueLengths + all OSS fields
+        // ca (Cassandra 5.0): bb fields without maxColumnValueLengths + all OSS fields
         // NOTE: when adding a new version, please add that to LegacySSTableTest, too.
 
         private final boolean isLatestVersion;
 
         /**
-         * DB-2648/CASSANDRA-9067: DSE 6.8/OSS 4.0 bloom filter representation changed (bitset data is no longer stored
+         * CASSANDRA-9067: DSE 6.8/OSS 4.0 bloom filter representation changed (bitset data is no longer stored
          * as BIG_ENDIAN longs, which avoids some redundant bit twiddling).
          */
         private final boolean hasOldBfFormat;
@@ -337,6 +335,7 @@ public class BtiFormat implements SSTableFormat<BtiTableReader, BtiTableWriter>
             return true;
         }
 
+        // new
         @Override
         public boolean hasZeroCopyMetadata()
         {
@@ -355,18 +354,21 @@ public class BtiFormat implements SSTableFormat<BtiTableReader, BtiTableWriter>
             return hasAccurateLegacyMinMax;
         }
 
+        // new
         @Override
         public boolean hasPartitionLevelDeletionsPresenceMarker()
         {
             return version.compareTo("ba") >= 0;
         }
 
+        // new
         @Override
         public boolean hasImprovedMinMax()
         {
             return version.compareTo("ba") >= 0;
         }
 
+        // new
         @Override
         public boolean hasMaxColumnValueLengths()
         {
