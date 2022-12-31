@@ -31,7 +31,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 
 import org.apache.cassandra.io.util.File;
-import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.db.rows.*;
@@ -564,18 +563,25 @@ public class Scrubber implements Closeable
     /**
      * During 2.x migration, under some circumstances rows might have gotten duplicated.
      * Merging iterator merges rows with same clustering.
-     *
+     * <p>
      * For more details, refer to CASSANDRA-12144.
      */
-    private static class RowMergingSSTableIterator extends WrappingUnfilteredRowIterator
+    private static class RowMergingSSTableIterator implements WrappingUnfilteredRowIterator
     {
         Unfiltered nextToOffer = null;
         private final OutputHandler output;
+        private final UnfilteredRowIterator wrapped;
 
         RowMergingSSTableIterator(UnfilteredRowIterator source, OutputHandler output)
         {
-            super(source);
+            this.wrapped = source;
             this.output = output;
+        }
+
+        @Override
+        public UnfilteredRowIterator wrapped()
+        {
+            return wrapped;
         }
 
         @Override
@@ -622,7 +628,7 @@ public class Scrubber implements Closeable
      * In some case like CASSANDRA-12127 the cells might have been stored in the wrong order. This decorator check the
      * cells order and collect the out of order cells to correct the problem.
      */
-    private static final class OrderCheckerIterator extends AbstractIterator<Unfiltered> implements UnfilteredRowIterator
+    private static final class OrderCheckerIterator extends AbstractIterator<Unfiltered> implements WrappingUnfilteredRowIterator
     {
         /**
          * The decorated iterator.
@@ -644,50 +650,10 @@ public class Scrubber implements Closeable
             this.comparator = comparator;
         }
 
-        public TableMetadata metadata()
-        {
-            return iterator.metadata();
-        }
-
-        public boolean isReverseOrder()
-        {
-            return iterator.isReverseOrder();
-        }
-
-        public RegularAndStaticColumns columns()
-        {
-            return iterator.columns();
-        }
-
-        public DecoratedKey partitionKey()
-        {
-            return iterator.partitionKey();
-        }
-
-        public Row staticRow()
-        {
-            return iterator.staticRow();
-        }
-
         @Override
-        public boolean isEmpty()
+        public UnfilteredRowIterator wrapped()
         {
-            return iterator.isEmpty();
-        }
-
-        public void close()
-        {
-            iterator.close();
-        }
-
-        public DeletionTime partitionLevelDeletion()
-        {
-            return iterator.partitionLevelDeletion();
-        }
-
-        public EncodingStats stats()
-        {
-            return iterator.stats();
+            return iterator;
         }
 
         public boolean hasRowsOutOfOrder()
@@ -721,10 +687,10 @@ public class Scrubber implements Closeable
 
     /**
      * This iterator converts negative {@link AbstractCell#localDeletionTime()} into {@link AbstractCell#MAX_DELETION_TIME}
-     *
+     * <p>
      * This is to recover entries with overflowed localExpirationTime due to CASSANDRA-14092
      */
-    private static final class FixNegativeLocalDeletionTimeIterator extends AbstractIterator<Unfiltered> implements UnfilteredRowIterator
+    private static final class FixNegativeLocalDeletionTimeIterator extends AbstractIterator<Unfiltered> implements WrappingUnfilteredRowIterator
     {
         /**
          * The decorated iterator.
@@ -742,52 +708,13 @@ public class Scrubber implements Closeable
             this.negativeLocalExpirationTimeMetrics = negativeLocalDeletionInfoMetrics;
         }
 
-        public TableMetadata metadata()
+        @Override
+        public UnfilteredRowIterator wrapped()
         {
-            return iterator.metadata();
-        }
-
-        public boolean isReverseOrder()
-        {
-            return iterator.isReverseOrder();
-        }
-
-        public RegularAndStaticColumns columns()
-        {
-            return iterator.columns();
-        }
-
-        public DecoratedKey partitionKey()
-        {
-            return iterator.partitionKey();
-        }
-
-        public Row staticRow()
-        {
-            return iterator.staticRow();
+            return iterator;
         }
 
         @Override
-        public boolean isEmpty()
-        {
-            return iterator.isEmpty();
-        }
-
-        public void close()
-        {
-            iterator.close();
-        }
-
-        public DeletionTime partitionLevelDeletion()
-        {
-            return iterator.partitionLevelDeletion();
-        }
-
-        public EncodingStats stats()
-        {
-            return iterator.stats();
-        }
-
         protected Unfiltered computeNext()
         {
             if (!iterator.hasNext())
@@ -819,13 +746,13 @@ public class Scrubber implements Closeable
             {
                 if (cd.column().isSimple())
                 {
-                    Cell<?> cell = (Cell<?>)cd;
+                    Cell<?> cell = (Cell<?>) cd;
                     if (cell.isExpiring() && cell.localDeletionTime() < 0)
                         return true;
                 }
                 else
                 {
-                    ComplexColumnData complexData = (ComplexColumnData)cd;
+                    ComplexColumnData complexData = (ComplexColumnData) cd;
                     for (Cell<?> cell : complexData)
                     {
                         if (cell.isExpiring() && cell.localDeletionTime() < 0)
@@ -846,14 +773,14 @@ public class Scrubber implements Closeable
             return row.transformAndFilter(livenessInfo, row.deletion(), cd -> {
                 if (cd.column().isSimple())
                 {
-                    Cell cell = (Cell)cd;
+                    Cell cell = (Cell) cd;
                     return cell.isExpiring() && cell.localDeletionTime() < 0
                            ? cell.withUpdatedTimestampAndLocalDeletionTime(cell.timestamp() + 1, AbstractCell.MAX_DELETION_TIME)
                            : cell;
                 }
                 else
                 {
-                    ComplexColumnData complexData = (ComplexColumnData)cd;
+                    ComplexColumnData complexData = (ComplexColumnData) cd;
                     return complexData.transformAndFilter(cell -> cell.isExpiring() && cell.localDeletionTime() < 0
                                                                   ? cell.withUpdatedTimestampAndLocalDeletionTime(cell.timestamp() + 1, AbstractCell.MAX_DELETION_TIME)
                                                                   : cell);
