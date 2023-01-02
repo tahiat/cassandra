@@ -447,12 +447,6 @@ public class RowIndexEntry extends AbstractRowIndexEntry
 
             in.skipBytesFully(size);
         }
-
-        public static void serializeOffsets(DataOutputBuffer out, int[] indexOffsets, int columnIndexCount) throws IOException
-        {
-            for (int i = 0; i < columnIndexCount; i++)
-                out.writeInt(indexOffsets[i]);
-        }
     }
 
     private static int serializedSize(DeletionTime deletionTime, long headerLength, int columnIndexCount)
