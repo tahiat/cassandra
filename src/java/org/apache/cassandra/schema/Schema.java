@@ -209,6 +209,12 @@ public class Schema implements SchemaProvider
         return keyspaceInstances.getIfReady(keyspaceName);
     }
 
+    /**
+     * Returns {@link ColumnFamilyStore} by the table identifier. Note that though, if called for {@link TableMetadata#id},
+     * when metadata points to a secondary index table, the {@link TableMetadata#id} denotes the identifier of the main
+     * table, not the index table. Thus, this method will return CFS of the main table rather than, probably expected,
+     * CFS for the index backing table.
+     */
     public ColumnFamilyStore getColumnFamilyStoreInstance(TableId id)
     {
         TableMetadata metadata = getTableMetadata(id);

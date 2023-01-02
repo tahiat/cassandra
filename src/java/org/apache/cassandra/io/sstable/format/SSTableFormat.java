@@ -17,9 +17,15 @@
  */
 package org.apache.cassandra.io.sstable.format;
 
+import java.util.Set;
+
 import com.google.common.base.CharMatcher;
 
+import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
+import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.format.big.BigFormat;
+import org.apache.cassandra.utils.OutputHandler;
 
 /**
  * Provides the accessors to data on disk.
@@ -36,8 +42,23 @@ public interface SSTableFormat
     SSTableWriter.Factory getWriterFactory();
     SSTableReader.Factory getReaderFactory();
 
+    /**
+     * All the components that the writter can produce when saving an sstable, as well as all the components
+     * that the reader can read.
+     */
+    Set<Component> allComponents();
+
     boolean cachesKeys();
     AbstractRowIndexEntry.KeyCacheValueSerializer<?, ?> getKeyCacheValueSerializer();
+
+    /**
+     * Returns a new scrubber for an sstable. Note that the transaction must contain only one reader
+     * and the reader must match the provided cfs.
+     */
+    IScrubber getScrubber(ColumnFamilyStore cfs,
+                          LifecycleTransaction transaction,
+                          OutputHandler outputHandler,
+                          IScrubber.Options options);
 
     enum Type
     {

@@ -21,6 +21,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import com.google.common.base.Preconditions;
+
 import org.apache.cassandra.db.filter.ClusteringIndexFilter;
 import org.apache.cassandra.io.sstable.format.AbstractRowIndexEntry;
 import org.apache.cassandra.io.sstable.format.SSTableFormat;
@@ -45,6 +47,7 @@ import org.apache.cassandra.io.util.DataInputPlus;
 import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.tracing.Tracing;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.OutputHandler;
 
 /**
  * SSTableReaders are open()ed by Keyspace.onStart; after that they are created by SSTableWriter.renameAndOpen.
@@ -374,4 +377,12 @@ public class BigTableReader extends SSTableReader
         }
 
     }
+
+    @Override
+    public IVerifier getVerifier(ColumnFamilyStore cfs, OutputHandler outputHandler, boolean isOffline, IVerifier.Options options)
+    {
+        Preconditions.checkArgument(cfs.metadata().equals(metadata()));
+        return new BigTableVerifier(cfs, this, outputHandler, isOffline, options);
+    }
+
 }

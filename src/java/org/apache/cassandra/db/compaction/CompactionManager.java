@@ -41,6 +41,9 @@ import com.google.common.util.concurrent.Uninterruptibles;
 import org.apache.cassandra.concurrent.ExecutorFactory;
 import org.apache.cassandra.concurrent.WrappedExecutorPlus;
 import org.apache.cassandra.dht.AbstractBounds;
+import org.apache.cassandra.io.sstable.IVerifier;
+import org.apache.cassandra.io.sstable.format.IScrubber;
+import org.apache.cassandra.io.sstable.format.SSTableFormat;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.locator.RangesAtEndpoint;
 import org.slf4j.Logger;
@@ -455,16 +458,7 @@ public class CompactionManager implements CompactionManagerMBean
         }
     }
 
-    public AllSSTableOpStatus performScrub(final ColumnFamilyStore cfs, final boolean skipCorrupted, final boolean checkData,
-                                           int jobs)
-    throws InterruptedException, ExecutionException
-    {
-        return performScrub(cfs, skipCorrupted, checkData, false, jobs);
-    }
-
-    public AllSSTableOpStatus performScrub(final ColumnFamilyStore cfs, final boolean skipCorrupted, final boolean checkData,
-                                           final boolean reinsertOverflowedTTL, int jobs)
-    throws InterruptedException, ExecutionException
+    public AllSSTableOpStatus performScrub(ColumnFamilyStore cfs, IScrubber.Options options, int jobs)
     {
         return parallelAllSSTableOperation(cfs, new OneSSTableOperation()
         {
@@ -477,12 +471,12 @@ public class CompactionManager implements CompactionManagerMBean
             @Override
             public void execute(LifecycleTransaction input)
             {
-                scrubOne(cfs, input, skipCorrupted, checkData, reinsertOverflowedTTL, active);
+                scrubOne(cfs, input, options, active);
             }
         }, jobs, OperationType.SCRUB);
     }
 
-    public AllSSTableOpStatus performVerify(ColumnFamilyStore cfs, Verifier.Options options) throws InterruptedException, ExecutionException
+    public AllSSTableOpStatus performVerify(ColumnFamilyStore cfs, IVerifier.Options options) throws InterruptedException, ExecutionException
     {
         assert !cfs.isIndex();
         return parallelAllSSTableOperation(cfs, new OneSSTableOperation()
@@ -1243,11 +1237,11 @@ public class CompactionManager implements CompactionManagerMBean
     }
 
     @VisibleForTesting
-    void scrubOne(ColumnFamilyStore cfs, LifecycleTransaction modifier, boolean skipCorrupted, boolean checkData, boolean reinsertOverflowedTTL, ActiveCompactionsTracker activeCompactions)
+    void scrubOne(ColumnFamilyStore cfs, LifecycleTransaction modifier, IScrubber.Options options, ActiveCompactionsTracker activeCompactions)
     {
         CompactionInfo.Holder scrubInfo = null;
-
-        try (Scrubber scrubber = new Scrubber(cfs, modifier, skipCorrupted, checkData, reinsertOverflowedTTL))
+        SSTableFormat format = modifier.onlyOne().descriptor.getFormat();
+        try (IScrubber scrubber = format.getScrubber(cfs, modifier, new OutputHandler.LogOutput(), options))
         {
             scrubInfo = scrubber.getScrubInfo();
             activeCompactions.beginCompaction(scrubInfo);
@@ -1261,11 +1255,10 @@ public class CompactionManager implements CompactionManagerMBean
     }
 
     @VisibleForTesting
-    void verifyOne(ColumnFamilyStore cfs, SSTableReader sstable, Verifier.Options options, ActiveCompactionsTracker activeCompactions)
+    void verifyOne(ColumnFamilyStore cfs, SSTableReader sstable, IVerifier.Options options, ActiveCompactionsTracker activeCompactions)
     {
         CompactionInfo.Holder verifyInfo = null;
-
-        try (Verifier verifier = new Verifier(cfs, sstable, false, options))
+        try (IVerifier verifier = sstable.getVerifier(cfs, new OutputHandler.LogOutput(), false, options))
         {
             verifyInfo = verifier.getVerifyInfo();
             activeCompactions.beginCompaction(verifyInfo);
