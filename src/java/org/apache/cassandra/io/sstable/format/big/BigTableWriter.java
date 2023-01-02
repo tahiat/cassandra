@@ -374,19 +374,20 @@ public class BigTableWriter extends SSTableWriter
             }
 
             invalidateCacheAtBoundary(dfile);
-            sstable = BigTableReader.internalOpen(descriptor,
-                                                  components, metadata,
-                                                  ifile, dfile,
-                                                  indexSummary,
-                                                  iwriter.bf.sharedCopy(),
-                                                  maxDataAge,
-                                                  stats,
-                                                  SSTableReader.OpenReason.EARLY,
-                                                  header);
+            sstable = new BigTableReaderBuilder(descriptor).setComponents(components)
+                                                           .setTableMetadataRef(metadata)
+                                                           .setIndexFile(ifile)
+                                                           .setDataFile(dfile)
+                                                           .setIndexSummary(indexSummary)
+                                                           .setFilter(iwriter.bf.sharedCopy())
+                                                           .setMaxDataAge(maxDataAge)
+                                                           .setStatsMetadata(stats)
+                                                           .setOpenReason(SSTableReader.OpenReason.EARLY)
+                                                           .setSerializationHeader(header)
+                                                           .setFirst(first)
+                                                           .setLast(boundary.lastKey)
+                                                           .build(true, true);
 
-            // now it's open, find the ACTUAL last readable key (i.e. for which the data file has also been flushed)
-            sstable.first = first.retainable();
-            sstable.last = boundary.lastKey.retainable();
             return sstable;
         }
         catch (Throwable t)
@@ -452,19 +453,19 @@ public class BigTableWriter extends SSTableWriter
                                 .complete();
             }
             invalidateCacheAtBoundary(dfile);
-            sstable = BigTableReader.internalOpen(descriptor,
-                                                  components,
-                                                  metadata,
-                                                  ifile,
-                                                  dfile,
-                                                  indexSummary,
-                                                  iwriter.bf.sharedCopy(),
-                                                  maxDataAge,
-                                                  stats,
-                                                  openReason,
-                                                  header);
-            sstable.first = first.retainable();
-            sstable.last = last.retainable();
+            sstable = new BigTableReaderBuilder(descriptor).setComponents(components)
+                                                           .setTableMetadataRef(metadata)
+                                                           .setIndexFile(ifile)
+                                                           .setDataFile(dfile)
+                                                           .setIndexSummary(indexSummary)
+                                                           .setFilter(iwriter.bf.sharedCopy())
+                                                           .setMaxDataAge(maxDataAge)
+                                                           .setStatsMetadata(stats)
+                                                           .setOpenReason(openReason)
+                                                           .setSerializationHeader(header)
+                                                           .setFirst(first)
+                                                           .setLast(last)
+                                                           .build(true, true);
             return sstable;
         }
         catch (Throwable t)

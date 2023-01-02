@@ -25,8 +25,10 @@ import com.google.common.base.CharMatcher;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.lifecycle.LifecycleTransaction;
 import org.apache.cassandra.io.sstable.Component;
+import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.GaugeProvider;
 import org.apache.cassandra.io.sstable.format.big.BigFormat;
+import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.utils.OutputHandler;
 
 /**
@@ -42,7 +44,7 @@ public interface SSTableFormat<R extends SSTableReader, W extends SSTableWriter>
     Version getVersion(String version);
 
     SSTableWriter.Factory getWriterFactory();
-    SSTableReader.Factory getReaderFactory();
+    SSTableReaderFactory<R, ?> getReaderFactory();
 
     /**
      * All the components that the writter can produce when saving an sstable, as well as all the components
@@ -118,5 +120,26 @@ public interface SSTableFormat<R extends SSTableReader, W extends SSTableWriter>
     interface FormatSpecificMetricsProviders
     {
         List<GaugeProvider<?, ?>> getGaugeProviders();
+    }
+
+    interface SSTableReaderFactory<R extends SSTableReader, B extends SSTableReaderBuilder<R, B>>
+    {
+        /**
+         * A simple builder which simply creates an instnace of {@link SSTableReader} with the provided parameters.
+         * It expects that all the required resources will be opened/loaded externally by the caller.
+         * <p>
+         * The builder is expected to perform basic validation of the provided parameters.
+         */
+        SSTableReaderBuilder<R, B> builder(Descriptor descriptor);
+
+        /**
+         * A builder which opens/loads all the required resources upon execution of
+         * {@link SSTableReaderLoadingBuilder#build(boolean, boolean)} and passed those resources to the created
+         * instance of {@link SSTableReader}.
+         * If the creation of {@link SSTableReader} fails, no resources should be left opened.
+         * <p>
+         * The builder is expected to perform basic validation of the provided parameters.
+         */
+        SSTableReaderLoadingBuilder<R, B> loadingBuilder(Descriptor descriptor, TableMetadataRef tableMetadataRef, Set<Component> components);
     }
 }
