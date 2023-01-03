@@ -148,7 +148,7 @@ public class BigTableWriter extends SortedTableWriter<BigFormatPartitionWriter>
         catch (Throwable t)
         {
             JVMStabilityInspector.inspectThrowable(t);
-            Throwables.closeAndAddSuppressed(t, dataFile, indexFile, indexSummary, filter);
+            Throwables.closeNonNullAndAddSuppressed(t, dataFile, indexFile, indexSummary, filter);
             throw t;
         }
     }

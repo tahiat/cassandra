@@ -412,7 +412,7 @@ public class FileHandle extends SharedCloseableImpl
             }
             catch (Throwable t)
             {
-                Throwables.closeAndAddSuppressed(t, regions, channel, compressionMetadata);
+                Throwables.closeNonNullAndAddSuppressed(t, regions, channel, compressionMetadata);
                 throw t;
             }
         }

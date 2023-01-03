@@ -1475,7 +1475,7 @@ public abstract class SSTableReader extends SSTable implements UnfilteredSource,
                         exceptions = ex;
                     }
 
-                    Throwable closeExceptions = Throwables.close(null, closeables);
+                    Throwable closeExceptions = Throwables.close(null, Iterables.filter(closeables, Objects::nonNull));
                     if (closeExceptions != null)
                     {
                         logger.error("Failed to close some sstable components of " + descriptor.baseFilename(), closeExceptions);

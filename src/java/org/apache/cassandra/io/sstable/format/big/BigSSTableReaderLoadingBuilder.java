@@ -138,7 +138,7 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
         }
         catch (IOException | RuntimeException | Error ex)
         {
-            Throwables.closeAndAddSuppressed(ex, builder.getDataFile(), builder.getIndexFile(), builder.getFilter(), builder.getIndexSummary());
+            Throwables.closeNonNullAndAddSuppressed(ex, builder.getDataFile(), builder.getIndexFile(), builder.getFilter(), builder.getIndexSummary());
             throw ex;
         }
     }
@@ -216,7 +216,7 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
         }
         catch (IOException | RuntimeException | Error ex)
         {
-            Throwables.closeAndAddSuppressed(ex, indexSummary, bf);
+            Throwables.closeNonNullAndAddSuppressed(ex, indexSummary, bf);
             throw ex;
         }
 

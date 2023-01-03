@@ -307,7 +307,7 @@ public abstract class SortedTableWriter<P extends SortedTablePartitionWriter> ex
         }
         catch (RuntimeException | Error ex)
         {
-            Throwables.closeAndAddSuppressed(ex, dataFile);
+            Throwables.closeNonNullAndAddSuppressed(ex, dataFile);
             throw ex;
         }
 

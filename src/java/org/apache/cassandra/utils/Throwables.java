@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
@@ -31,6 +32,7 @@ import javax.annotation.Nonnull;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Iterables;
 
 import org.apache.cassandra.io.FSReadError;
 import org.apache.cassandra.io.FSWriteError;
@@ -188,9 +190,31 @@ public final class Throwables
         }));
     }
 
+    /**
+     * @see {@link #closeAndAddSuppressed(Throwable, Iterable)}
+     */
     public static void closeAndAddSuppressed(@Nonnull Throwable t, AutoCloseable... closeables)
     {
-        Preconditions.checkNotNull(t);
+        closeAndAddSuppressed(t, Arrays.asList(closeables));
+    }
+
+    /**
+     * Do what {@link #closeAndAddSuppressed(Throwable, Iterable)} does, additionally filtering out all null closables.
+     */
+    public static void closeNonNullAndAddSuppressed(@Nonnull Throwable t, AutoCloseable... closeables)
+    {
+        closeAndAddSuppressed(t, Iterables.filter(Arrays.asList(closeables), Objects::nonNull));
+    }
+
+    /**
+     * Closes all closables in the provided collections and accumulates the possible exceptions thrown when closing.
+     *
+     * @param accumulate non-null exception to accumulate errors thrown when closing the provided resources
+     * @param closeables closeables to be closed
+     */
+    public static void closeAndAddSuppressed(@Nonnull Throwable accumulate, Iterable<AutoCloseable> closeables)
+    {
+        Preconditions.checkNotNull(accumulate);
         for (AutoCloseable closeable : closeables)
         {
             try
@@ -199,11 +223,18 @@ public final class Throwables
             }
             catch (Throwable ex)
             {
-                t.addSuppressed(ex);
+                accumulate.addSuppressed(ex);
             }
         }
     }
 
+    /**
+     * Closes all the resources in the provided collections and accumulates the possible exceptions thrown when closing.
+     *
+     * @param accumulate the initial value for the exception accumulator, can be {@code null}
+     * @param closeables closeables to be closed
+     * @return {@code null}, {@param accumulate} or the first exception thrown when closing the provided resources
+     */
     public static Throwable close(Throwable accumulate, Iterable<? extends AutoCloseable> closeables)
     {
         for (AutoCloseable closeable : closeables)
