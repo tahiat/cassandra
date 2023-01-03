@@ -199,7 +199,7 @@ public abstract class SSTableWriterBuilder<W extends SSTableWriter, B extends SS
 
     public SSTableZeroCopyWriter createZeroCopyWriter(LifecycleNewTracker lifecycleNewTracker)
     {
-        return new SSTableZeroCopyWriter(getDescriptor(), getTableMetadataRef(), lifecycleNewTracker, getComponents());
+        return new SSTableZeroCopyWriter(this, lifecycleNewTracker);
     }
 
 }
