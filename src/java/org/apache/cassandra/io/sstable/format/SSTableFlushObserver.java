@@ -18,6 +18,7 @@
 package org.apache.cassandra.io.sstable.format;
 
 import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.db.rows.Unfiltered;
 import org.apache.cassandra.io.sstable.KeyReader;
 
@@ -43,6 +44,14 @@ public interface SSTableFlushObserver
      *                           position as expected by {@link SSTableReader#keyAtPositionFromSecondaryIndex(long)}.
      */
     void startPartition(DecoratedKey key, long keyPosition, long KeyPositionForSASI);
+
+    /**
+     * Called when a static row is being written to the sstable. If static columns are present in the table, it is called
+     * after {@link #startPartition(DecoratedKey, long, long)} and before any calls to {@link #nextUnfilteredCluster(Unfiltered)}.
+     *
+     * @param staticRow static row appended to the sstable, can be empty, may not be {@code null}
+     */
+    void staticRow(Row staticRow);
 
     /**
      * Called after the unfiltered cluster is written to the sstable.
