@@ -23,6 +23,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -219,9 +220,16 @@ public abstract class SSTableWriter extends SSTable implements Transactional
     }
 
     /**
-     * Open the resultant SSTableReader before it has been fully written
+     * Open the resultant SSTableReader before it has been fully written.
+     *
+     * The passed consumer will be called when the necessary data has been flushed to disk/cache. This may never happen
+     * (e.g. if the table was finished before the flushes materialized, or if this call returns false e.g. if a table
+     * was already prepared but hasn't reached readiness yet).
+     *
+     * Uses callback instead of future because preparation and callback happen on the same thread.
      */
-    public abstract SSTableReader openEarly();
+
+    public abstract void openEarly(Consumer<SSTableReader> doWhenReady);
 
     /**
      * Open the resultant SSTableReader once it has been fully written, but before the
@@ -231,17 +239,9 @@ public abstract class SSTableWriter extends SSTable implements Transactional
 
     protected abstract SSTableReader openFinal(SSTableReader.OpenReason openReason);
 
-    public SSTableReader finish(long repairedAt, long maxDataAge, boolean openResult)
-    {
-        if (repairedAt > 0)
-            this.repairedAt = repairedAt;
-        this.maxDataAge = maxDataAge;
-        return finish(openResult);
-    }
-
     public SSTableReader finish(boolean openResult)
     {
-        setOpenResult(openResult);
+        this.setOpenResult(openResult);
         txnProxy.finish();
         observers.forEach(SSTableFlushObserver::complete);
         return finished();
