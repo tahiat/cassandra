@@ -23,7 +23,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.function.Supplier;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
@@ -40,10 +40,8 @@ import org.apache.cassandra.db.rows.Unfiltered;
 import org.apache.cassandra.db.rows.UnfilteredRowIterator;
 import org.apache.cassandra.index.Index;
 import org.apache.cassandra.io.FSWriteError;
-import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTable;
-import org.apache.cassandra.io.sstable.SSTableBuilder;
 import org.apache.cassandra.io.sstable.metadata.MetadataCollector;
 import org.apache.cassandra.io.sstable.metadata.MetadataComponent;
 import org.apache.cassandra.io.sstable.metadata.MetadataType;
@@ -55,9 +53,12 @@ import org.apache.cassandra.schema.SchemaConstants;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.schema.TableMetadataRef;
 import org.apache.cassandra.utils.Throwables;
+import org.apache.cassandra.utils.Throwables;
 import org.apache.cassandra.utils.TimeUUID;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.concurrent.Transactional;
+
+import static com.google.common.base.Preconditions.checkNotNull;
 
 /**
  * This is the API all table writers must implement.
@@ -74,47 +75,29 @@ public abstract class SSTableWriter extends SSTable implements Transactional
     protected final long keyCount;
     protected final MetadataCollector metadataCollector;
     protected final SerializationHeader header;
-    protected final MmappedRegionsCache mmappedRegionsCache = new MmappedRegionsCache();
-    protected final TransactionalProxy txnProxy = txnProxy();
     protected final Collection<SSTableFlushObserver> observers;
+    protected final MmappedRegionsCache mmappedRegionsCache;
+    protected final TransactionalProxy txnProxy = txnProxy();
 
     protected abstract TransactionalProxy txnProxy();
 
-    // due to lack of multiple inheritance, we use an inner class to proxy our Transactional implementation details
-    protected abstract class TransactionalProxy extends AbstractTransactional
+    protected SSTableWriter(SSTableWriterBuilder<?, ?> builder, LifecycleNewTracker lifecycleNewTracker)
     {
-        // should be set during doPrepare()
-        protected SSTableReader finalReader;
-        protected boolean openResult;
+        super(builder);
+        checkNotNull(builder.getFlushObservers());
+        checkNotNull(builder.getMetadataCollector());
+        checkNotNull(builder.getSerializationHeader());
 
-        @Override
-        protected Throwable doPostCleanup(Throwable accumulate)
-        {
-            accumulate = super.doPostCleanup(accumulate);
-            accumulate = Throwables.close(accumulate, Collections.singleton(mmappedRegionsCache));
-            return accumulate;
-        }
-    }
+        this.keyCount = builder.getKeyCount();
+        this.repairedAt = builder.getRepairedAt();
+        this.pendingRepair = builder.getPendingRepair();
+        this.isTransient = builder.isTransientSSTable();
+        this.metadataCollector = builder.getMetadataCollector();
+        this.header = builder.getSerializationHeader();
+        this.observers = builder.getFlushObservers();
+        this.mmappedRegionsCache = builder.getMmappedRegionsCache();
 
-    protected SSTableWriter(Descriptor descriptor,
-                            long keyCount,
-                            long repairedAt,
-                            TimeUUID pendingRepair,
-                            boolean isTransient,
-                            TableMetadataRef metadata,
-                            MetadataCollector metadataCollector,
-                            SerializationHeader header,
-                            Collection<SSTableFlushObserver> observers,
-                            Set<Component> components)
-    {
-        super(new SSTableBuilder<>(descriptor).setComponents(components).setTableMetadataRef(metadata));
-        this.keyCount = keyCount;
-        this.repairedAt = repairedAt;
-        this.pendingRepair = pendingRepair;
-        this.isTransient = isTransient;
-        this.metadataCollector = metadataCollector;
-        this.header = header;
-        this.observers = observers == null ? Collections.emptySet() : observers;
+        lifecycleNewTracker.trackNew(this);
     }
 
     public static SSTableWriter create(Descriptor descriptor,
@@ -204,7 +187,7 @@ public abstract class SSTableWriter extends SSTable implements Transactional
      * @return the created index entry if something was written, that is if {@code iterator}
      * wasn't empty, {@code null} otherwise.
      *
-     * @throws FSWriteError if a write to the dataFile fails
+     * @throws FSWriteError if writing to the dataFile fails
      */
     public abstract AbstractRowIndexEntry append(UnfilteredRowIterator iterator);
 
@@ -246,6 +229,8 @@ public abstract class SSTableWriter extends SSTable implements Transactional
      */
     public abstract SSTableReader openFinalEarly();
 
+    protected abstract SSTableReader openFinal(SSTableReader.OpenReason openReason);
+
     public SSTableReader finish(long repairedAt, long maxDataAge, boolean openResult)
     {
         if (repairedAt > 0)
@@ -268,6 +253,7 @@ public abstract class SSTableWriter extends SSTable implements Transactional
      */
     public SSTableReader finished()
     {
+        txnProxy.finalReaderAccessed = true;
         return txnProxy.finalReader;
     }
 
@@ -325,7 +311,7 @@ public abstract class SSTableWriter extends SSTable implements Transactional
     }
 
     /**
-     * Parameters for calculating the expected size of an sstable. Exposed on memtable flush sets (i.e. collected
+     * Parameters for calculating the expected size of an SSTable. Exposed on memtable flush sets (i.e. collected
      * subsets of a memtable that will be written to sstables).
      */
     public interface SSTableSizeParameters
@@ -387,6 +373,66 @@ public abstract class SSTableWriter extends SSTable implements Transactional
                                        metadata);
             Guardrails.collectionSize.guard(cellsSize, msg, true, null);
             Guardrails.itemsPerCollection.guard(cellsCount, msg, true, null);
+        }
+    }
+
+    // due to lack of multiple inheritance, we use an inner class to proxy our Transactional implementation details
+    protected class TransactionalProxy extends AbstractTransactional
+    {
+        // should be set during doPrepare()
+        private final Supplier<ImmutableList<Transactional>> transactionals;
+
+        private SSTableReader finalReader;
+        private boolean openResult;
+        private boolean finalReaderAccessed;
+
+        public TransactionalProxy(Supplier<ImmutableList<Transactional>> transactionals)
+        {
+            this.transactionals = transactionals;
+        }
+
+        // finalise our state on disk, including renaming
+        protected void doPrepare()
+        {
+            transactionals.get().forEach(Transactional::prepareToCommit);
+            new StatsComponent(finalizeMetadata()).save(descriptor);
+
+            // save the table of components
+            TOCComponent.appendTOC(descriptor, components);
+
+            if (openResult)
+                finalReader = openFinal(SSTableReader.OpenReason.NORMAL);
+        }
+
+        protected Throwable doCommit(Throwable accumulate)
+        {
+            for (Transactional t : transactionals.get().reverse())
+                accumulate = t.commit(accumulate);
+
+            return accumulate;
+        }
+
+        protected Throwable doAbort(Throwable accumulate)
+        {
+            for (Transactional t : transactionals.get())
+                accumulate = t.abort(accumulate);
+
+            if (!finalReaderAccessed && finalReader != null)
+            {
+                accumulate = Throwables.perform(accumulate, () -> finalReader.selfRef().release());
+                finalReader = null;
+                finalReaderAccessed = false;
+            }
+
+            return accumulate;
+        }
+
+        @Override
+        protected Throwable doPostCleanup(Throwable accumulate)
+        {
+            accumulate = super.doPostCleanup(accumulate);
+            accumulate = Throwables.close(accumulate, Collections.singleton(mmappedRegionsCache));
+            return accumulate;
         }
     }
 }

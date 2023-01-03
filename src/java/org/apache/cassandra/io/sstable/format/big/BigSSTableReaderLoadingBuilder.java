@@ -29,6 +29,7 @@ import org.apache.cassandra.db.SerializationHeader;
 import org.apache.cassandra.io.compress.CompressionMetadata;
 import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Downsampling;
+import org.apache.cassandra.io.sstable.IndexComponent;
 import org.apache.cassandra.io.sstable.IndexSummary;
 import org.apache.cassandra.io.sstable.IndexSummaryBuilder;
 import org.apache.cassandra.io.sstable.KeyReader;
@@ -309,11 +310,10 @@ public class BigSSTableReaderLoadingBuilder extends SSTableReaderLoadingBuilder<
                                                            : OptionalInt.empty();
 
         if (indexFileBuilder == null)
-            indexFileBuilder = new FileHandle.Builder(descriptor.fileFor(Component.PRIMARY_INDEX)).bufferSize(indexBufferSize.orElse(DiskOptimizationStrategy.MAX_BUFFER_SIZE));
+            indexFileBuilder = IndexComponent.fileBuilder(descriptor.fileFor(Component.PRIMARY_INDEX), ioOptions, chunkCache)
+                                             .bufferSize(indexBufferSize.orElse(DiskOptimizationStrategy.MAX_BUFFER_SIZE));
 
         indexBufferSize.ifPresent(indexFileBuilder::bufferSize);
-        indexFileBuilder.withChunkCache(chunkCache);
-        indexFileBuilder.mmapped(ioOptions.indexDiskAccessMode);
 
         return indexFileBuilder;
     }
