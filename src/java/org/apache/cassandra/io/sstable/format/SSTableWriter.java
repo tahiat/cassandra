@@ -219,23 +219,20 @@ public abstract class SSTableWriter extends SSTable implements Transactional
 
     public abstract void resetAndTruncate();
 
-    public SSTableWriter setRepairedAt(long repairedAt)
+    public void setRepairedAt(long repairedAt)
     {
         if (repairedAt > 0)
             this.repairedAt = repairedAt;
-        return this;
     }
 
-    public SSTableWriter setMaxDataAge(long maxDataAge)
+    public void setMaxDataAge(long maxDataAge)
     {
         this.maxDataAge = maxDataAge;
-        return this;
     }
 
-    public SSTableWriter setOpenResult(boolean openResult)
+    public void setOpenResult(boolean openResult)
     {
         txnProxy.openResult = openResult;
-        return this;
     }
 
     /**

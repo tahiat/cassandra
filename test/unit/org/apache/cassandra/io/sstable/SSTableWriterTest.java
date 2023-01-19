@@ -63,7 +63,8 @@ public class SSTableWriterTest extends SSTableWriterTestBase
                 writer.append(builder.build().unfilteredIterator());
             }
 
-            SSTableReader s = writer.setMaxDataAge(1000).openEarly();
+            writer.setMaxDataAge(1000);
+            SSTableReader s = writer.openEarly();
             assert s != null;
             assertFileCounts(dir.tryListNames());
             for (int i = 10000; i < 20000; i++)
@@ -73,7 +74,8 @@ public class SSTableWriterTest extends SSTableWriterTestBase
                     builder.newRow("" + j).add("val", ByteBuffer.allocate(1000));
                 writer.append(builder.build().unfilteredIterator());
             }
-            SSTableReader s2 = writer.setMaxDataAge(1000).openEarly();
+            writer.setMaxDataAge(1000);
+            SSTableReader s2 = writer.openEarly();
             assertTrue(s.last.compareTo(s2.last) < 0);
             assertFileCounts(dir.tryListNames());
             s.selfRef().release();
