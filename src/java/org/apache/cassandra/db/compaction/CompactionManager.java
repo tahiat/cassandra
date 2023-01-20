@@ -34,6 +34,7 @@ import javax.management.openmbean.TabularData;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Predicates;
 import com.google.common.collect.*;
 import com.google.common.util.concurrent.RateLimiter;
 import com.google.common.util.concurrent.Uninterruptibles;
@@ -1037,24 +1038,12 @@ public class CompactionManager implements CompactionManagerMBean
 
     public void forceCompactionForKey(ColumnFamilyStore cfStore, DecoratedKey key)
     {
-        forceCompaction(cfStore, () -> sstablesWithKey(cfStore, key), sstable -> sstable.maybePresent(key));
+        forceCompaction(cfStore, () -> sstablesWithKey(cfStore, key), Predicates.alwaysTrue());
     }
 
     public void forceCompactionForKeys(ColumnFamilyStore cfStore, Collection<DecoratedKey> keys)
     {
-        com.google.common.base.Predicate<SSTableReader> predicate = sstable -> {
-            for (DecoratedKey key : keys)
-            {
-                if(sstable.maybePresent(key))
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        };
-
-        forceCompaction(cfStore, () -> sstablesWithKeys(cfStore, keys), predicate);
+        forceCompaction(cfStore, () -> sstablesWithKeys(cfStore, keys), Predicates.alwaysTrue());
     }
 
     private static Collection<SSTableReader> sstablesWithKey(ColumnFamilyStore cfs, DecoratedKey key)
@@ -1064,7 +1053,7 @@ public class CompactionManager implements CompactionManagerMBean
                                                                                              key.getToken().maxKeyBound());
         for (SSTableReader sstable : liveTables)
         {
-            if (sstable.maybePresent(key))
+            if (sstable.mayContainAssumingKeyIsInRange(key))
                 sstables.add(sstable);
         }
         return sstables.isEmpty() ? Collections.emptyList() : sstables;

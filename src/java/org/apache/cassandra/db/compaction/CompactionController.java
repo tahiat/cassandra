@@ -251,7 +251,7 @@ public class CompactionController extends AbstractCompactionController
 
         for (SSTableReader sstable: filteredSSTables)
         {
-            if (sstable.maybePresent(key))
+            if (sstable.mayContainAssumingKeyIsInRange(key))
             {
                 minTimestampSeen = Math.min(minTimestampSeen, sstable.getMinTimestamp());
                 hasTimestamp = true;

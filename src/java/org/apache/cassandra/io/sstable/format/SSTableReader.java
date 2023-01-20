@@ -1392,7 +1392,11 @@ public abstract class SSTableReader extends SSTable implements UnfilteredSource,
         });
     }
 
-    public boolean maybePresent(DecoratedKey key)
+    /**
+     * The method verifies whether the sstable may contain the provided key. The method does approximation using
+     * Bloom filter if it is present and if it is not, performs accurate check in the index.
+     */
+    public boolean mayContainAssumingKeyIsInRange(DecoratedKey key)
     {
         // if we don't have bloom filter(bf_fp_chance=1.0 or filter file is missing),
         // we check index file instead.
