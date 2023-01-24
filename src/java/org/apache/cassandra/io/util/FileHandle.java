@@ -383,7 +383,8 @@ public class FileHandle extends SharedCloseableImpl
                 {
                     if (compressionMetadata != null)
                     {
-                        regions = MmappedRegions.map(channel, compressionMetadata);
+                        regions = mmappedRegionsCache != null ? mmappedRegionsCache.getOrCreate(channel, compressionMetadata)
+                                                              : MmappedRegions.map(channel, compressionMetadata);
                         rebuffererFactory = maybeCached(new CompressedChunkReader.Mmap(channel, compressionMetadata, regions));
                     }
                     else

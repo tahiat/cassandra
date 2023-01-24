@@ -31,6 +31,7 @@ import java.util.TreeSet;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.primitives.Longs;
 
+import net.openhft.chronicle.queue.impl.single.BinarySearch;
 import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.FSReadError;
@@ -43,6 +44,7 @@ import org.apache.cassandra.schema.CompressionParams;
 import org.apache.cassandra.utils.concurrent.Ref;
 import org.apache.cassandra.utils.concurrent.Transactional;
 import org.apache.cassandra.utils.concurrent.WrappedSharedCloseable;
+import org.psjava.algo.sequence.search.BinarySearchFirst;
 
 /**
  * Holds metadata about compressed file
@@ -244,6 +246,28 @@ public class CompressionMetadata extends WrappedSharedCloseable
                                 : chunkOffsets.getLong(idx + 8);
 
         return new Chunk(chunkOffset, (int) (nextChunkOffset - chunkOffset - 4)); // "4" bytes reserved for checksum
+    }
+
+    public long getDataOffsetForChunkOffset(long chunkOffset)
+    {
+        long l = 0;
+        long h = (chunkOffsetsSize >> 3) - 1;
+        long idx, offset;
+
+        while (l <= h)
+        {
+            idx = (l + h) >>> 1;
+            offset = chunkOffsets.getLong(idx << 3);
+
+            if (offset < chunkOffset)
+                l = idx + 1;
+            else if (offset > chunkOffset)
+                h = idx - 1;
+            else
+                return idx * parameters.chunkLength();
+        }
+
+        throw new IllegalArgumentException("No chunk with offset " + chunkOffset);
     }
 
     /**

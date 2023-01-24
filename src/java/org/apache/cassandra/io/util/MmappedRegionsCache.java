@@ -25,6 +25,8 @@ import javax.annotation.concurrent.NotThreadSafe;
 
 import com.google.common.base.Preconditions;
 
+import org.apache.cassandra.io.compress.CompressionMetadata;
+
 /**
  * A simply utility for caching {@link MmappedRegions}. It is primarily created for creating file handles for the same
  * file multiple times as it is being done when an sstable is opened early.
@@ -49,6 +51,23 @@ public class MmappedRegionsCache implements AutoCloseable
         MmappedRegions regions = cache.computeIfAbsent(channel.file(), ignored -> MmappedRegions.map(channel, length));
         Preconditions.checkArgument(regions.isValid(channel));
         regions.extend(length);
+        return regions.sharedCopy();
+    }
+
+    /**
+     * Looks for mmapped regions in cache. If found, a shared copy is created and extended for the provided metadata.
+     * If mmapped regions do not exist yet for the provided key, they are created and a shared copy is returned.
+     *
+     * @param channel channel for which the mmapped regions are requested
+     * @param metadata compression metadata of the file
+     * @return a shared copy of the cached mmapped regions
+     */
+    public MmappedRegions getOrCreate(ChannelProxy channel, CompressionMetadata metadata)
+    {
+        Preconditions.checkState(!closed);
+        MmappedRegions regions = cache.computeIfAbsent(channel.file(), ignored -> MmappedRegions.map(channel, metadata));
+        Preconditions.checkArgument(regions.isValid(channel));
+        regions.extend(metadata);
         return regions.sharedCopy();
     }
 
