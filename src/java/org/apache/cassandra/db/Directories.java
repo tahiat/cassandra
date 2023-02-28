@@ -33,13 +33,12 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
-import java.util.function.Consumer;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Predicate;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSet.Builder;
+import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.Iterables;
 
 import org.apache.commons.lang3.StringUtils;
@@ -109,6 +108,18 @@ public class Directories
         for (int i = 0; i < locations.length; ++i)
             dataDirectories[i] = new DataDirectory(new File(locations[i]));
     }
+
+    private final static Comparator<Descriptor> descriptorComparator = Comparator.nullsLast((desc1, desc2) -> {
+        int dirCmp = desc1.directory.compareTo(desc2.directory);
+        if (dirCmp != 0)
+            return dirCmp;
+        int genCmp = Integer.compare(desc1.generation, desc2.generation);
+        if (genCmp != 0)
+            return genCmp;
+        if (!Objects.equals(desc1, desc2))
+            logger.warn("Found two sstables with the same identifier, in the same directory: {}, {}", desc1, desc2);
+        return desc1.baseFilename().compareTo(desc2.baseFilename());
+    });
 
     /**
      * Checks whether Cassandra has RWX permissions to the specified directory.  Logs an error with
@@ -623,7 +634,7 @@ public class Directories
         private boolean includeBackups;
         private boolean onlyBackups;
         private int nbFiles;
-        private final Map<Descriptor, Set<Component>> components = new HashMap<>();
+        private final SortedMap<Descriptor, Set<Component>> components = new TreeMap<>(descriptorComparator);
         private boolean filtered;
         private String snapshotName;
 
@@ -665,10 +676,10 @@ public class Directories
             return this;
         }
 
-        public Map<Descriptor, Set<Component>> list()
+        public SortedMap<Descriptor, Set<Component>> list()
         {
             filter();
-            return ImmutableMap.copyOf(components);
+            return ImmutableSortedMap.copyOf(components);
         }
 
         public List<File> listFiles()
