@@ -496,6 +496,10 @@
     <target name="codecoverage" depends="jacoco-run,jacoco-report" description="Create code coverage report"/>
 
     <target name="_build_java">
+        <path id="processorpath.ref">
+            <pathelement location="${user.home}/.m2/repository/com/google/errorprone/error_prone_core/2.18.0/error_prone_core-2.18.0-with-dependencies.jar"/>
+            <pathelement location="${user.home}/.m2/repository/org/checkerframework/dataflow-errorprone/3.15.0/dataflow-errorprone-3.15.0.jar"/>
+        </path>
         <!-- Note: we cannot use javac's 'release' option, as that does not allow accessing sun.misc.Unsafe nor
         Nashorn's ClassFilter class as any javac modules option is invalid for release 8. -->
         <echo message="Compiling for Java ${ant.java.version}..."/>
@@ -505,6 +509,10 @@
             <src path="${build.src.java}"/>
             <src path="${build.src.gen-java}"/>
             <compilerarg value="-XDignore.symbol.file"/>
+            <compilerarg value="-XDcompilePolicy=simple"/>
+            <compilerarg value="-processorpath"/>
+            <compilerarg pathref="processorpath.ref"/>
+            <compilerarg value="-Xplugin:ErrorProne -Xep:DeadException:ERROR" />
             <compilerarg line="${jdk11plus-javac-exports}"/>
             <classpath>
                 <path refid="cassandra.classpath"/>
