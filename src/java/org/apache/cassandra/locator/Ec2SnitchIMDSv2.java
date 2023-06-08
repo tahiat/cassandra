@@ -17,53 +17,90 @@
  */
 
 package org.apache.cassandra.locator;
+
 import java.io.DataInputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
-import org.apache.cassandra.exceptions.ConfigurationException;
-import org.apache.cassandra.io.util.FileUtils;
-import org.apache.cassandra.utils.Clock.Global;
+import com.google.common.base.Supplier;
+import com.google.common.base.Suppliers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.io.util.FileUtils;
+
 /**
- * An implementation of the Ec2Snitch which uses Instance Meta Data Service v2 (IMDSv2) which requires you
+ * An implementation of the Ec2Snitch which uses Instance Metadata Service v2 (IMDSv2) which requires you
  * to get a session token first before calling the metaData service
  */
 public class Ec2SnitchIMDSv2 extends Ec2Snitch
 {
-    protected static final Logger logger = LoggerFactory.getLogger(Ec2SnitchIMDSv2.class);
-    private static final long REFRESH_TOKEN_TIME = 21600;
-    private static final String AWS_EC2_METADATA_HEADER_TTL = "X-aws-ec2-metadata-token-ttl-seconds";
-    private static final String TOKEN_TTL_SECONDS = String.valueOf(REFRESH_TOKEN_TIME);
-    private static final String AWS_EC2_METADATA_HEADER = "X-aws-ec2-metadata-token";
+    private static final Logger logger = LoggerFactory.getLogger(Ec2SnitchIMDSv2.class);
+    private static final int MAX_TOKEN_TIME_IN_SECONDS = 21600;
+    private static final String AWS_EC2_METADATA_TOKEN_HEADER = "X-aws-ec2-metadata-token";
+    private static final String AWS_EC2_METADATA_TOKEN_TTL_SECONDS_HEADER = "X-aws-ec2-metadata-token-ttl-seconds";
     private static final String TOKEN_ENDPOINT = "http://169.254.169.254/latest/api/token";
 
-    private String myToken;
-    private Long myLastTokenTime;
+    private Supplier<ApiCallResult> tokenSupplier;
+    private long tokenTTL;
 
-
-    public Ec2SnitchIMDSv2() throws IOException, ConfigurationException
+    public Ec2SnitchIMDSv2() throws IOException
     {
-        super();
+        super(new SnitchProperties());
+    }
+
+    public Ec2SnitchIMDSv2(SnitchProperties snitchProperties) throws IOException
+    {
+        super(snitchProperties);
+
+        String parsedTokenTTL = snitchProperties.get(AWS_EC2_METADATA_TOKEN_TTL_SECONDS_HEADER, Integer.toString(MAX_TOKEN_TIME_IN_SECONDS));
+
+        try
+        {
+            tokenTTL = Integer.parseInt(parsedTokenTTL);
+
+            if (tokenTTL > MAX_TOKEN_TIME_IN_SECONDS || tokenTTL < 1)
+            {
+                logger.info(String.format("property %s was set to %s which is more than maximum allowed range of (0, 21600]: %s, defaulting to %s",
+                                          AWS_EC2_METADATA_TOKEN_HEADER, tokenTTL, MAX_TOKEN_TIME_IN_SECONDS, MAX_TOKEN_TIME_IN_SECONDS));
+                tokenTTL = MAX_TOKEN_TIME_IN_SECONDS;
+            }
+        }
+        catch (NumberFormatException ex)
+        {
+            logger.error(String.format("Unable to parse integer from %s, value to parse: %s. Defaulting to %s",
+                                       AWS_EC2_METADATA_TOKEN_HEADER, parsedTokenTTL, MAX_TOKEN_TIME_IN_SECONDS));
+            tokenTTL = MAX_TOKEN_TIME_IN_SECONDS;
+        }
+
+        tokenSupplier = Suppliers.memoizeWithExpiration(this::getNewToken, Math.max(5, tokenTTL - 100), TimeUnit.SECONDS);
     }
 
     @Override
-    String awsApiCall(final String url) throws IOException, ConfigurationException
+    String awsApiCall(final String url) throws IOException
     {
-        // Populate the region and zone by introspection, fail if 404 on metadata
-        if (myToken == null || myLastTokenTime == null
-            || Global.currentTimeMillis() - myLastTokenTime > (REFRESH_TOKEN_TIME - 100))
-        {
-            getAndSetNewToken();
-        }
-        final HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-        conn.setRequestProperty(AWS_EC2_METADATA_HEADER, myToken);
-        return getContent(conn);
+        ApiCallResult token = tokenSupplier.get();
+
+        if (token == null)
+            throw new IllegalStateException("Unable to get token!");
+
+        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
+        conn.setRequestProperty(AWS_EC2_METADATA_TOKEN_HEADER, token.body);
+
+        // we need to return ApiCallResult but this would break awsApiCall
+        ApiCallResult result = getResult(conn);
+
+        // TODO
+        // this should return whole ApiCallResult the implementations could inspect further
+        // ideally, when tokenSupplier.get() return ApiCallResult with not 200 code,
+        // it should return that one and proceed only in case tokenSupplier.get() returned 200.
+        return result.body;
     }
 
     /**
@@ -72,33 +109,49 @@ public class Ec2SnitchIMDSv2 extends Ec2Snitch
      *
      * @throws IOException
      */
-    private void getAndSetNewToken() throws IOException
+    private ApiCallResult getNewToken()
     {
-        final URL url = new URL(TOKEN_ENDPOINT);
-        final HttpURLConnection http = (HttpURLConnection) url.openConnection();
-        http.setRequestProperty(AWS_EC2_METADATA_HEADER_TTL, TOKEN_TTL_SECONDS);
-        http.setRequestMethod("PUT");
+        try
+        {
+            final URL url = new URL(TOKEN_ENDPOINT);
 
-        myToken = getContent(http);
-        myLastTokenTime = Global.currentTimeMillis();
+            final HttpURLConnection http = (HttpURLConnection) url.openConnection();
+            http.setRequestProperty(AWS_EC2_METADATA_TOKEN_TTL_SECONDS_HEADER, String.valueOf(tokenTTL));
+            http.setRequestMethod("PUT");
+
+            return getResult(http);
+        }
+        catch (Exception ex)
+        {
+            logger.error("Unable to get a token!", ex);
+        }
+
+        return null;
     }
 
-    private String getContent(final HttpURLConnection conn) throws IOException
+    public static class ApiCallResult
+    {
+        String body;
+        int httpCode;
+        Map<String, List<String>> headers;
+    }
+
+    private ApiCallResult getResult(final HttpURLConnection conn) throws IOException
     {
         DataInputStream d = null;
         try
         {
-            if (conn.getResponseCode() != 200)
-            {
-                throw new ConfigurationException(
-                "Ec2SnitchIMDSv2 was unable to execute the API call. Not an ec2 node?");
-            }
-            // Read the information. I wish I could say (String) conn.getContent() here...
+            ApiCallResult result = new ApiCallResult();
             final int cl = conn.getContentLength();
             final byte[] b = new byte[cl];
             d = new DataInputStream((FilterInputStream) conn.getContent());
             d.readFully(b);
-            return new String(b, StandardCharsets.UTF_8);
+
+            result.body = new String(b, StandardCharsets.UTF_8);
+            result.headers = conn.getHeaderFields();
+            result.httpCode = conn.getResponseCode();
+
+            return result;
         }
         finally
         {

@@ -20,9 +20,10 @@ package org.apache.cassandra.locator;
 import java.io.IOException;
 import java.net.InetAddress;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.gms.ApplicationState;
 import org.apache.cassandra.gms.Gossiper;
 import org.apache.cassandra.service.StorageService;
@@ -33,16 +34,22 @@ import org.apache.cassandra.service.StorageService;
  */
 public class Ec2MultiRegionSnitchIMDSv2 extends Ec2SnitchIMDSv2
 {
+    private static final Logger logger = LoggerFactory.getLogger(Ec2MultiRegionSnitchIMDSv2.class);
 
     private static final String PUBLIC_IP_QUERY_URL = "http://169.254.169.254/latest/meta-data/public-ipv4";
     private static final String PRIVATE_IP_QUERY_URL = "http://169.254.169.254/latest/meta-data/local-ipv4";
     private final InetAddress localPrivateAddress;
 
-    public Ec2MultiRegionSnitchIMDSv2() throws IOException, ConfigurationException
+    public Ec2MultiRegionSnitchIMDSv2() throws IOException
     {
-        super();
+        this(new SnitchProperties());
+    }
+
+    public Ec2MultiRegionSnitchIMDSv2(SnitchProperties snitchProperties) throws IOException
+    {
+        super(snitchProperties);
         InetAddress localPublicAddress = InetAddress.getByName(awsApiCall(PUBLIC_IP_QUERY_URL));
-        logger.info("EC2Snitch using publicIP as identifier: {}", localPublicAddress);
+        logger.info("Using publicIP as identifier: {}", localPublicAddress);
         localPrivateAddress = InetAddress.getByName(awsApiCall(PRIVATE_IP_QUERY_URL));
         // use the Public IP to broadcast Address to other nodes.
         DatabaseDescriptor.setBroadcastAddress(localPublicAddress);

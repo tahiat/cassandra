@@ -49,7 +49,9 @@ public class Ec2Snitch extends AbstractNetworkTopologySnitch
     static final String EC2_NAMING_LEGACY = "legacy";
     private static final String EC2_NAMING_STANDARD = "standard";
 
-    private static final String ZONE_NAME_QUERY_URL = "http://169.254.169.254/latest/meta-data/placement/availability-zone";
+    private static final String DEFAULT_METADATA_SERVICE_ADDRESS = "169.254.169.254";
+    private static final String ZONE_NAME_QUERY_URL_TEMPLATE = "http://%s/latest/meta-data/placement/availability-zone";
+
     private static final String DEFAULT_DC = "UNKNOWN-DC";
     private static final String DEFAULT_RACK = "UNKNOWN-RACK";
 
@@ -66,7 +68,7 @@ public class Ec2Snitch extends AbstractNetworkTopologySnitch
 
     public Ec2Snitch(SnitchProperties props) throws IOException, ConfigurationException
     {
-        String az = awsApiCall(ZONE_NAME_QUERY_URL);
+        String az = awsApiCall(getZoneQueryUrl(props));
 
         // if using the full naming scheme, region name is created by removing letters from the
         // end of the availability zone and zone is the full zone name
@@ -94,6 +96,17 @@ public class Ec2Snitch extends AbstractNetworkTopologySnitch
         String datacenterSuffix = props.get("dc_suffix", "");
         ec2region = region.concat(datacenterSuffix);
         logger.info("EC2Snitch using region: {}, zone: {}.", ec2region, ec2zone);
+    }
+
+    public String getMetadataServiceAddress(SnitchProperties props)
+    {
+        String parsed = props.get("metadata_service_address", DEFAULT_METADATA_SERVICE_ADDRESS);
+        return parsed.isEmpty() ? DEFAULT_METADATA_SERVICE_ADDRESS : parsed;
+    }
+
+    public String getZoneQueryUrl(SnitchProperties props)
+    {
+        return String.format(ZONE_NAME_QUERY_URL_TEMPLATE, getMetadataServiceAddress(props));
     }
 
     private static boolean isUsingLegacyNaming(SnitchProperties props)
