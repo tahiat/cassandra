@@ -75,18 +75,12 @@ public class EC2SnitchTest
     {
         public TestEC2Snitch() throws IOException, ConfigurationException
         {
-            super();
+            this(new SnitchProperties());
         }
 
         public TestEC2Snitch(SnitchProperties props) throws IOException, ConfigurationException
         {
-            super(props);
-        }
-
-        @Override
-        String awsApiCall(String url) throws IOException, ConfigurationException
-        {
-            return az;
+            super(props, (query, method, extraHeaders) ->  az);
         }
     }
 

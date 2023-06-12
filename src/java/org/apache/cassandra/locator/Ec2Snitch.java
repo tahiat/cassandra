@@ -17,24 +17,19 @@
  */
 package org.apache.cassandra.locator;
 
-import java.io.DataInputStream;
-import java.io.FilterInputStream;
 import java.io.IOException;
-import java.net.HttpURLConnection;
-import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Set;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.gms.ApplicationState;
 import org.apache.cassandra.gms.EndpointState;
 import org.apache.cassandra.gms.Gossiper;
-import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.utils.FBUtilities;
 
 /**
@@ -49,8 +44,7 @@ public class Ec2Snitch extends AbstractNetworkTopologySnitch
     static final String EC2_NAMING_LEGACY = "legacy";
     private static final String EC2_NAMING_STANDARD = "standard";
 
-    private static final String DEFAULT_METADATA_SERVICE_ADDRESS = "169.254.169.254";
-    private static final String ZONE_NAME_QUERY_URL_TEMPLATE = "http://%s/latest/meta-data/placement/availability-zone";
+    private static final String ZONE_NAME_QUERY = "/latest/meta-data/placement/availability-zone";
 
     private static final String DEFAULT_DC = "UNKNOWN-DC";
     private static final String DEFAULT_RACK = "UNKNOWN-RACK";
@@ -61,6 +55,8 @@ public class Ec2Snitch extends AbstractNetworkTopologySnitch
 
     private Map<InetAddressAndPort, Map<String, String>> savedEndpoints;
 
+    protected final Ec2MetadataServiceConnector connector;
+
     public Ec2Snitch() throws IOException, ConfigurationException
     {
         this(new SnitchProperties());
@@ -68,7 +64,14 @@ public class Ec2Snitch extends AbstractNetworkTopologySnitch
 
     public Ec2Snitch(SnitchProperties props) throws IOException, ConfigurationException
     {
-        String az = awsApiCall(getZoneQueryUrl(props));
+        this(props, Ec2MetadataServiceConnector.create(props));
+    }
+
+    @VisibleForTesting
+    public Ec2Snitch(SnitchProperties props, Ec2MetadataServiceConnector connector) throws IOException, ConfigurationException
+    {
+        this.connector = connector;
+        String az = connector.awsApiCall(ZONE_NAME_QUERY);
 
         // if using the full naming scheme, region name is created by removing letters from the
         // end of the availability zone and zone is the full zone name
@@ -98,45 +101,9 @@ public class Ec2Snitch extends AbstractNetworkTopologySnitch
         logger.info("EC2Snitch using region: {}, zone: {}.", ec2region, ec2zone);
     }
 
-    public String getMetadataServiceAddress(SnitchProperties props)
-    {
-        String parsed = props.get("metadata_service_address", DEFAULT_METADATA_SERVICE_ADDRESS);
-        return parsed.isEmpty() ? DEFAULT_METADATA_SERVICE_ADDRESS : parsed;
-    }
-
-    public String getZoneQueryUrl(SnitchProperties props)
-    {
-        return String.format(ZONE_NAME_QUERY_URL_TEMPLATE, getMetadataServiceAddress(props));
-    }
-
     private static boolean isUsingLegacyNaming(SnitchProperties props)
     {
         return props.get(SNITCH_PROP_NAMING_SCHEME, EC2_NAMING_STANDARD).equalsIgnoreCase(EC2_NAMING_LEGACY);
-    }
-
-    String awsApiCall(String url) throws IOException, ConfigurationException
-    {
-        // Populate the region and zone by introspection, fail if 404 on metadata
-        HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-        DataInputStream d = null;
-        try
-        {
-            conn.setRequestMethod("GET");
-            if (conn.getResponseCode() != 200)
-                throw new ConfigurationException("Ec2Snitch was unable to execute the API call. Not an ec2 node?");
-
-            // Read the information. I wish I could say (String) conn.getContent() here...
-            int cl = conn.getContentLength();
-            byte[] b = new byte[cl];
-            d = new DataInputStream((FilterInputStream) conn.getContent());
-            d.readFully(b);
-            return new String(b, StandardCharsets.UTF_8);
-        }
-        finally
-        {
-            FileUtils.close(d);
-            conn.disconnect();
-        }
     }
 
     public String getRack(InetAddressAndPort endpoint)
