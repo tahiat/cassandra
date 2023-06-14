@@ -70,6 +70,11 @@ public interface PrimaryKeyMap extends Closeable
      */
     long rowIdFromPrimaryKey(PrimaryKey key);
 
+    /**
+     * Returns the number of primary keys in the map
+     */
+    long count();
+
     @Override
     default void close()
     {

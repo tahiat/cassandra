@@ -1129,8 +1129,8 @@ public class StorageAttachedIndexDDLTest extends SAITester
         waitForTableIndexesQueryable();
 
         populateData.run();
-        verifySSTableIndexes(IndexMetadata.generateDefaultIndexName(currentTable(), V1_COLUMN_IDENTIFIER), 2, 0);
-        verifySSTableIndexes(IndexMetadata.generateDefaultIndexName(currentTable(), V2_COLUMN_IDENTIFIER), 2, 0);
+        verifySSTableIndexes(IndexMetadata.generateDefaultIndexName(currentTable(), V1_COLUMN_IDENTIFIER), 2, 2);
+        verifySSTableIndexes(IndexMetadata.generateDefaultIndexName(currentTable(), V2_COLUMN_IDENTIFIER), 2, 2);
         verifyIndexFiles(numericIndexContext, literalIndexContext, 2, 0, 0, 2, 2);
 
         ResultSet rows = executeNet("SELECT id1 FROM %s WHERE v1>=0");
@@ -1140,8 +1140,8 @@ public class StorageAttachedIndexDDLTest extends SAITester
 
         // compact empty index
         compact();
-        verifySSTableIndexes(IndexMetadata.generateDefaultIndexName(currentTable(), V1_COLUMN_IDENTIFIER), 1, 0);
-        verifySSTableIndexes(IndexMetadata.generateDefaultIndexName(currentTable(), V2_COLUMN_IDENTIFIER), 1, 0);
+        verifySSTableIndexes(IndexMetadata.generateDefaultIndexName(currentTable(), V1_COLUMN_IDENTIFIER), 1, 1);
+        verifySSTableIndexes(IndexMetadata.generateDefaultIndexName(currentTable(), V2_COLUMN_IDENTIFIER), 1, 1);
         waitForAssert(() -> verifyIndexFiles(numericIndexContext, literalIndexContext, 1, 0, 0, 1, 1));
 
         rows = executeNet("SELECT id1 FROM %s WHERE v1>=0");

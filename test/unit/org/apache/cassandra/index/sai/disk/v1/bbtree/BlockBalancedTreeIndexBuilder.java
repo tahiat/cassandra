@@ -43,9 +43,9 @@ import org.apache.cassandra.index.sai.IndexContext;
 import org.apache.cassandra.index.sai.SAITester;
 import org.apache.cassandra.index.sai.disk.PrimaryKeyMap;
 import org.apache.cassandra.index.sai.disk.format.IndexDescriptor;
-import org.apache.cassandra.index.sai.disk.v1.segment.NumericIndexSegmentSearcher;
 import org.apache.cassandra.index.sai.disk.v1.PerColumnIndexFiles;
 import org.apache.cassandra.index.sai.disk.v1.segment.IndexSegmentSearcher;
+import org.apache.cassandra.index.sai.disk.v1.segment.NumericIndexSegmentSearcher;
 import org.apache.cassandra.index.sai.disk.v1.segment.SegmentMetadata;
 import org.apache.cassandra.index.sai.memory.MemtableTermsIterator;
 import org.apache.cassandra.index.sai.utils.PrimaryKey;
@@ -77,6 +77,12 @@ public class BlockBalancedTreeIndexBuilder
         public long rowIdFromPrimaryKey(PrimaryKey key)
         {
             return key.token().getLongValue();
+        }
+
+        @Override
+        public long count()
+        {
+            return Long.MAX_VALUE;
         }
     };
     public static final PrimaryKeyMap.Factory TEST_PRIMARY_KEY_MAP_FACTORY = () -> TEST_PRIMARY_KEY_MAP;
