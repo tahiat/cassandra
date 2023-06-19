@@ -326,6 +326,8 @@
         <equals arg1="${ant.java.version}" arg2="1.8"/>
     </condition>
 
+    <property name="cf.check.only" value="" description="Specify a glob pattern of source files for CheckerFramework to verify"/>
+
     <!--
          Add all the dependencies.
     -->
@@ -496,8 +498,7 @@
     <!--
         The build target builds all the .class files
     -->
-    <target name="build" depends="resolver-retrieve-build,build-project,checkstyle" description="Compile Cassandra classes"/>
-    <target name="_build_unsafe" depends="resolver-retrieve-build,build-project" description="Compile Cassandra classes without checks"/>
+    <target name="build" depends="resolver-retrieve-build,build-project" description="Compile Cassandra classes"/>
     <target name="codecoverage" depends="jacoco-run,jacoco-report" description="Create code coverage report"/>
 
     <target name="_build_java">
@@ -517,7 +518,7 @@
         </javac>
     </target>
 
-    <target depends="init,gen-cql3-grammar,generate-cql-html,generate-jflex-java,rat-check,get-git-sha"
+    <target depends="init,gen-cql3-grammar,generate-cql-html,generate-jflex-java,get-git-sha"
             name="build-project">
         <echo message="${ant.project.name}: ${ant.file}"/>
         <!-- Order matters! -->
@@ -527,6 +528,31 @@
             <fileset dir="${build.src.resources}" />
         </copy>
         <copy todir="${basedir}/conf" file="${build.classes.main}/META-INF/hotspot_compiler"/>
+    </target>
+
+    <target name="cf" depends="build" unless="no-cf" description="Run CheckerFramework against all production source files">
+        <property name="_cf.check.only" value="**"/>
+        <property name="_cf.listfiles" value="false"/>
+        <antcall target="_checkerframework"/>
+    </target>
+
+    <target name="cf-dirty" depends="build" unless="no-cf" description="Run CheckerFramework against all changed production source files (according to git diff)">
+        <property name="_cf.check.only" value="${git.diff.sources.path}"/>
+        <property name="_cf.listfiles" value="true"/>
+        <antcall target="_checkerframework"/>
+    </target>
+
+    <target name="cf-only" depends="build" unless="no-cf" description="Run CheckerFramework against production source files specified in cf.check.only property (comma separated file paths under src/java or glob patterns)">
+        <property name="_cf.check.only" value="${cf.check.only}"/>
+        <property name="_cf.listfiles" value="true"/>
+        <antcall target="_checkerframework"/>
+    </target>
+
+    <target name="check" depends="build,build-test">
+        <antcall target="cf"/>
+        <antcall target="rat-check"/>
+        <antcall target="checkstyle"/>
+        <antcall target="checkstyle-test"/>
     </target>
 
     <!-- Stress build file -->
@@ -639,11 +665,11 @@
     <property name="simulator-bootstrap.build.classes" value="${build.classes}/simulator-bootstrap" />
     <property name="simulator-bootstrap.manifest" value="${simulator-bootstrap.build.classes}/MANIFEST.MF" />
 
-    <target name="simulator-asm-build" depends="_build_unsafe" description="build simulator-asm">
+    <target name="simulator-asm-build" depends="build" description="build simulator-asm">
         <antcall target="_simulator-asm_build"/>
     </target>
 
-    <target name="simulator-bootstrap-build" depends="_build_unsafe" description="build simulator-bootstrap">
+    <target name="simulator-bootstrap-build" depends="build" description="build simulator-bootstrap">
         <antcall target="_simulator-bootstrap_build"/>
     </target>
 
@@ -828,7 +854,7 @@
       </jar>
     </target>
 
-    <target name="_artifacts-init" depends="jar">
+    <target name="_artifacts-init" depends="jar,check">
       <mkdir dir="${dist.dir}"/>
       <!-- fix the control linefeed so that builds on windows works on linux -->
       <fixcrlf srcdir="bin" includes="**/*" eol="lf" eof="remove" />
@@ -1008,7 +1034,7 @@
     <antcall target="build-test" inheritRefs="true"/>
   </target>
 
-  <target name="build-test" depends="_main-jar,stress-build-test,fqltool-build,resolver-dist-lib,simulator-jars,checkstyle-test"
+  <target name="build-test" depends="_main-jar,stress-build-test,fqltool-build,resolver-dist-lib,simulator-jars"
           description="Compile test classes">
     <antcall target="_build-test"/>
     <checktestnameshelper/>
@@ -1983,7 +2009,7 @@
   </target>
 
   <!-- ECJ 4.6.1 in standalone mode does not work with JPMS, so we skip this target for Java 11 -->
-  <target name="eclipse-warnings" depends="build, _assert_rat_output" description="Run eclipse compiler code analysis" if="java.version.8">
+  <target name="eclipse-warnings" depends="build" description="Run eclipse compiler code analysis" if="java.version.8">
         <property name="ecj.log.dir" value="${build.dir}/ecj" />
         <property name="ecj.warnings.file" value="${ecj.log.dir}/eclipse_compiler_checks.txt"/>
         <mkdir  dir="${ecj.log.dir}" />
@@ -2105,4 +2131,5 @@
   <import file="${basedir}/.build/build-rat.xml"/>
   <import file="${basedir}/.build/build-owasp.xml"/>
   <import file="${basedir}/.build/build-git.xml"/>
+  <import file="${basedir}/.build/build-checkerframework.xml"/>
 </project>

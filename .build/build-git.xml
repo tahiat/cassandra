@@ -50,5 +50,19 @@
         </condition>
         <echo level="warning" if:true="${is-dirty}">Repository state is dirty</echo>
         <echo level="warning" if:true="${is-dirty}">${git.diffstat}</echo>
+
+        <exec if:true="${git.is-available}" executable="git" osfamily="unix" dir="${basedir}" logError="true" failonerror="false" failifexecutionfails="false">
+            <arg value="diff"/>
+            <arg value="--name-only"/>
+            <arg value="--no-renames"/>
+            <arg value="--ignore-space-change"/>
+            <arg value="HEAD"/>
+            <arg value="src/java"/>
+            <redirector outputproperty="git.diff.sources"/>
+        </exec>
+        <filelist id="git.diff.sources.list" files="${git.diff.sources}"/>
+        <pathconvert property="git.diff.sources.path" pathsep="," refid="git.diff.sources.list">
+            <map from="${basedir}/src/java/" to=""/>
+        </pathconvert>
     </target>
 </project>
