@@ -19,9 +19,13 @@ package org.apache.cassandra.io.util;
 
 import java.nio.ByteBuffer;
 
+import org.checkerframework.checker.mustcall.qual.MustCallAlias;
+
 /**
  * Input stream around a single ByteBuffer.
  */
+@MustCallAlias
+@SuppressWarnings("declaration.inconsistent.with.extends.clause") // because this class and its subclasses do not have to be closed
 public class DataInputBuffer extends RebufferingInputStream
 {
     private static ByteBuffer slice(byte[] buffer, int offset, int length)

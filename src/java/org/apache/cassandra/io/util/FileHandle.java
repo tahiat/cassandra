@@ -32,6 +32,7 @@ import org.apache.cassandra.utils.Throwables;
 import org.apache.cassandra.utils.concurrent.Ref;
 import org.apache.cassandra.utils.concurrent.RefCounted;
 import org.apache.cassandra.utils.concurrent.SharedCloseableImpl;
+import org.checkerframework.checker.mustcall.qual.NotOwning;
 
 /**
  * {@link FileHandle} provides access to a file for reading, including the ones written by various {@link SequentialWriter}
@@ -309,7 +310,7 @@ public class FileHandle extends SharedCloseableImpl
             return this;
         }
 
-        public Builder withMmappedRegionsCache(MmappedRegionsCache mmappedRegionsCache)
+        public Builder withMmappedRegionsCache(@NotOwning MmappedRegionsCache mmappedRegionsCache)
         {
             this.mmappedRegionsCache = mmappedRegionsCache;
             return this;

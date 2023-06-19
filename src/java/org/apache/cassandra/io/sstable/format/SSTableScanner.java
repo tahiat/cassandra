@@ -45,6 +45,8 @@ import org.apache.cassandra.io.sstable.SSTableReadsListener;
 import org.apache.cassandra.io.util.RandomAccessReader;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.utils.AbstractIterator;
+import org.checkerframework.checker.calledmethods.qual.EnsuresCalledMethods;
+import org.checkerframework.checker.mustcall.qual.Owning;
 
 import static org.apache.cassandra.dht.AbstractBounds.isEmpty;
 import static org.apache.cassandra.dht.AbstractBounds.maxLeft;
@@ -56,7 +58,7 @@ public abstract class SSTableScanner<S extends SSTableReader,
 implements ISSTableScanner
 {
     protected final AtomicBoolean isClosed = new AtomicBoolean(false);
-    protected final RandomAccessReader dfile;
+    protected final @Owning RandomAccessReader dfile;
     protected final S sstable;
 
     protected final Iterator<AbstractBounds<PartitionPosition>> rangeIterator;
@@ -65,7 +67,7 @@ implements ISSTableScanner
     protected final DataRange dataRange;
     private final SSTableReadsListener listener;
 
-    protected I iterator;
+    protected @Owning I iterator;
 
     protected long startScan = -1;
     protected long bytesScanned = 0;
@@ -146,14 +148,21 @@ implements ISSTableScanner
         }
     }
 
+    @EnsuresCalledMethods(value = "this", methods = "doClose")
     public void close()
     {
         try
         {
             if (isClosed.compareAndSet(false, true))
             {
-                markScanned();
-                doClose();
+                try
+                {
+                    markScanned();
+                }
+                finally
+                {
+                    doClose();
+                }
             }
         }
         catch (IOException e)
@@ -199,6 +208,7 @@ implements ISSTableScanner
         return sstable.metadata();
     }
 
+    @SuppressWarnings("missing.creates.mustcall.for")
     public boolean hasNext()
     {
         if (iterator == null)

@@ -21,17 +21,20 @@ package org.apache.cassandra.io.util;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
+import org.checkerframework.checker.calledmethods.qual.EnsuresCalledMethods;
+import org.checkerframework.checker.mustcall.qual.MustCallAlias;
+import org.checkerframework.checker.mustcall.qual.Owning;
+
 public class SafeMemoryWriter extends DataOutputBuffer
 {
-    private SafeMemory memory;
+    private @Owning SafeMemory memory;
 
-    @SuppressWarnings("resource")
     public SafeMemoryWriter(long initialCapacity)
     {
         this(new SafeMemory(initialCapacity));
     }
 
-    private SafeMemoryWriter(SafeMemory memory)
+    private SafeMemoryWriter(@Owning SafeMemory memory)
     {
         super(tailBuffer(memory).order(ByteOrder.BIG_ENDIAN));
         this.memory = memory;
@@ -48,6 +51,7 @@ public class SafeMemoryWriter extends DataOutputBuffer
         resizeTo(calculateNewSize(count));
     }
 
+    @SuppressWarnings("missing.creates.mustcall.for")
     private void resizeTo(long newCapacity)
     {
         if (newCapacity != capacity())
@@ -56,14 +60,20 @@ public class SafeMemoryWriter extends DataOutputBuffer
             ByteOrder order = buffer.order();
 
             SafeMemory oldBuffer = memory;
-            memory = this.memory.copy(newCapacity);
-            buffer = tailBuffer(memory);
+            try
+            {
+                memory = this.memory.copy(newCapacity);
+                buffer = tailBuffer(memory);
 
-            int newPosition = (int) (position - tailOffset(memory));
-            buffer.position(newPosition);
-            buffer.order(order);
-
-            oldBuffer.free();
+                int newPosition = (int) (position - tailOffset(memory));
+                buffer.position(newPosition);
+                buffer.order(order);
+            }
+            finally
+            {
+                if (oldBuffer != memory)
+                    oldBuffer.free();
+            }
         }
     }
 
@@ -72,8 +82,11 @@ public class SafeMemoryWriter extends DataOutputBuffer
         resizeTo(length());
     }
 
+    @Override
+    @EnsuresCalledMethods(value = {"channel", "memory"}, methods = {"close"})
     public void close()
     {
+        FileUtils.closeQuietly(channel);
         memory.close();
     }
 
@@ -93,7 +106,7 @@ public class SafeMemoryWriter extends DataOutputBuffer
     }
 
     @Override
-    public SafeMemoryWriter order(ByteOrder order)
+    public @MustCallAlias SafeMemoryWriter order(ByteOrder order)
     {
         super.order(order);
         return this;

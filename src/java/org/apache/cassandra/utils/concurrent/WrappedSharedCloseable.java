@@ -20,6 +20,10 @@ package org.apache.cassandra.utils.concurrent;
 
 import java.util.Arrays;
 
+import org.checkerframework.checker.calledmethods.qual.EnsuresCalledMethods;
+import org.checkerframework.checker.mustcall.qual.NotOwning;
+import org.checkerframework.checker.mustcall.qual.Owning;
+
 import static org.apache.cassandra.utils.Throwables.maybeFail;
 import static org.apache.cassandra.utils.Throwables.merge;
 
@@ -29,14 +33,14 @@ import static org.apache.cassandra.utils.Throwables.merge;
  */
 public abstract class WrappedSharedCloseable extends SharedCloseableImpl
 {
-    final AutoCloseable[] wrapped;
+    final @NotOwning AutoCloseable[] wrapped;
 
-    public WrappedSharedCloseable(final AutoCloseable closeable)
+    public WrappedSharedCloseable(final @Owning AutoCloseable closeable)
     {
         this(new AutoCloseable[] {closeable});
     }
 
-    public WrappedSharedCloseable(final AutoCloseable[] closeable)
+    public WrappedSharedCloseable(final @Owning AutoCloseable[] closeable)
     {
         super(new Tidy(closeable));
         wrapped = closeable;
@@ -44,7 +48,9 @@ public abstract class WrappedSharedCloseable extends SharedCloseableImpl
 
     static final class Tidy implements RefCounted.Tidy
     {
-        final AutoCloseable[] closeable;
+        final @NotOwning AutoCloseable[] closeable;
+
+        @EnsuresCalledMethods(value = "#1", methods = "close")
         Tidy(AutoCloseable[] closeable)
         {
             this.closeable = closeable;

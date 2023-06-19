@@ -30,6 +30,7 @@ import org.apache.cassandra.io.sstable.Component;
 import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.io.util.FileUtils;
+import org.checkerframework.checker.mustcall.qual.Owning;
 
 public class ComponentContext implements AutoCloseable
 {
@@ -70,14 +71,24 @@ public class ComponentContext implements AutoCloseable
     /**
      * @return file channel to be streamed, either original component or hardlinked component.
      */
-    public FileChannel channel(Descriptor descriptor, Component component, long size) throws IOException
+    public @Owning FileChannel channel(Descriptor descriptor, Component component, long size) throws IOException
     {
         File toTransfer = hardLinks.containsKey(component) ? hardLinks.get(component) : descriptor.fileFor(component);
-        @SuppressWarnings("resource") // file channel will be closed by Caller
         FileChannel channel = toTransfer.newReadChannel();
 
-        assert size == channel.size() : String.format("Entire sstable streaming expects %s file size to be %s but got %s.",
-                                                      component, size, channel.size());
+        try
+        {
+            if (size != channel.size())
+            {
+                throw new AssertionError(String.format("Entire sstable streaming expects %s file size to be %s but got %s.",
+                                                       component, size, channel.size()));
+            }
+        }
+        catch (Throwable t)
+        {
+            FileUtils.closeQuietly(channel);
+        }
+
         return channel;
     }
 

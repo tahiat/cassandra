@@ -24,6 +24,13 @@ import java.util.PriorityQueue;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import org.checkerframework.checker.mustcall.qual.MustCallAlias;
+import org.checkerframework.checker.mustcall.qual.NotOwning;
+import org.checkerframework.checker.mustcall.qual.Owning;
+
+import static org.apache.cassandra.utils.SuppressionConstants.RESOURCE;
+
+// TODO this iterator has #close method which is not used in many places - this is a bug because some implemnetations may require cleanup
 public abstract class RangeIterator<K extends Comparable<K>, T extends CombinedValue<K>> extends AbstractIterator<T> implements Closeable
 {
     private final K min, max;
@@ -149,7 +156,8 @@ public abstract class RangeIterator<K extends Comparable<K>, T extends CombinedV
             return ranges.size();
         }
 
-        public Builder<K, D> add(RangeIterator<K, D> range)
+        @SuppressWarnings(RESOURCE)
+        public @Owning Builder<K, D> add(@Owning RangeIterator<K, D> range)
         {
             if (range == null)
                 return this;
@@ -161,7 +169,7 @@ public abstract class RangeIterator<K extends Comparable<K>, T extends CombinedV
             return this;
         }
 
-        public Builder<K, D> add(List<RangeIterator<K, D>> ranges)
+        public Builder<K, D> add(@Owning List<RangeIterator<K, D>> ranges)
         {
             if (ranges == null || ranges.isEmpty())
                 return this;
@@ -170,7 +178,7 @@ public abstract class RangeIterator<K extends Comparable<K>, T extends CombinedV
             return this;
         }
 
-        public final RangeIterator<K, D> build()
+        public final @MustCallAlias RangeIterator<K, D> build()
         {
             if (rangeCount() == 0)
                 return new EmptyRangeIterator<>();
@@ -196,8 +204,10 @@ public abstract class RangeIterator<K extends Comparable<K>, T extends CombinedV
             protected long tokenCount;
 
             // iterator with the least number of items
+            @NotOwning
             protected RangeIterator<K, D> minRange;
             // iterator with the most number of items
+            @NotOwning
             protected RangeIterator<K, D> maxRange;
 
             // tracks if all of the added ranges overlap, which is useful in case of intersection,
@@ -217,7 +227,7 @@ public abstract class RangeIterator<K extends Comparable<K>, T extends CombinedV
              *
              * @param range The range to update statistics with.
              */
-            public void update(RangeIterator<K, D> range)
+            public void update(@NotOwning RangeIterator<K, D> range)
             {
                 switch (iteratorType)
                 {
@@ -247,12 +257,12 @@ public abstract class RangeIterator<K extends Comparable<K>, T extends CombinedV
                 tokenCount += range.getCount();
             }
 
-            private RangeIterator<K, D> min(RangeIterator<K, D> a, RangeIterator<K, D> b)
+            private @MustCallAlias RangeIterator<K, D> min(RangeIterator<K, D> a, RangeIterator<K, D> b)
             {
                 return a.getCount() > b.getCount() ? b : a;
             }
 
-            private RangeIterator<K, D> max(RangeIterator<K, D> a, RangeIterator<K, D> b)
+            private @MustCallAlias RangeIterator<K, D> max(RangeIterator<K, D> a, RangeIterator<K, D> b)
             {
                 return a.getCount() > b.getCount() ? a : b;
             }

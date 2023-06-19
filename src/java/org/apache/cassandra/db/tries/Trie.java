@@ -29,6 +29,8 @@ import com.google.common.collect.ImmutableList;
 import org.agrona.DirectBuffer;
 import org.apache.cassandra.utils.bytecomparable.ByteComparable;
 
+import static org.apache.cassandra.utils.SuppressionConstants.METHODREF_RECEIVER;
+
 /**
  * Base class for tries.
  *
@@ -357,6 +359,7 @@ public abstract class Trie<T>
     /**
      * Constuct a textual representation of the trie.
      */
+    @SuppressWarnings(METHODREF_RECEIVER) // TODO probable bug in the Checker Framework (https://github.com/typetools/checker-framework/issues/6038)
     public String dump()
     {
         return dump(Object::toString);

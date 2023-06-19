@@ -28,12 +28,14 @@ import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.io.util.RandomAccessReader;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.Throwables;
+import org.checkerframework.checker.calledmethods.qual.EnsuresCalledMethods;
+import org.checkerframework.checker.mustcall.qual.Owning;
 
 @NotThreadSafe
 public class BigTableKeyReader implements KeyReader
 {
     private final FileHandle indexFile;
-    private final RandomAccessReader indexFileReader;
+    private final @Owning RandomAccessReader indexFileReader;
     private final IndexSerializer rowIndexEntrySerializer;
     private final long initialPosition;
 
@@ -42,7 +44,7 @@ public class BigTableKeyReader implements KeyReader
     private long keyPosition;
 
     private BigTableKeyReader(FileHandle indexFile,
-                              RandomAccessReader indexFileReader,
+                              @Owning RandomAccessReader indexFileReader,
                               IndexSerializer rowIndexEntrySerializer)
     {
         this.indexFile = indexFile;
@@ -66,7 +68,6 @@ public class BigTableKeyReader implements KeyReader
         }
     }
 
-    @SuppressWarnings({ "resource" })
     public static BigTableKeyReader create(FileHandle indexFile, IndexSerializer serializer) throws IOException
     {
         FileHandle iFile = null;
@@ -95,6 +96,7 @@ public class BigTableKeyReader implements KeyReader
     }
 
     @Override
+    @EnsuresCalledMethods(value = "indexFileReader", methods = "close")
     public void close()
     {
         key = null;

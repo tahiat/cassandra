@@ -22,14 +22,14 @@ import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.SortedMap;
 
+import com.google.common.collect.Iterators;
+
+import com.carrotsearch.hppc.LongSet;
 import org.apache.cassandra.index.sasi.utils.CombinedTerm;
 import org.apache.cassandra.index.sasi.utils.RangeIterator;
 import org.apache.cassandra.io.util.DataOutputPlus;
 import org.apache.cassandra.utils.AbstractIterator;
 import org.apache.cassandra.utils.Pair;
-
-import com.carrotsearch.hppc.LongSet;
-import com.google.common.collect.Iterators;
 
 /**
  * Intended usage of this class is to be used in place of {@link DynamicTokenTreeBuilder}
@@ -83,10 +83,10 @@ public class StaticTokenTreeBuilder extends AbstractTokenTreeBuilder
         return tokenCount == 0;
     }
 
-    public Iterator<Pair<Long, LongSet>> iterator()
+    public AbstractIterator<Pair<Long, LongSet>> iterator()
     {
         Iterator<Token> iterator = combinedTerm.getTokenIterator();
-        return new AbstractIterator<Pair<Long, LongSet>>()
+        return new AbstractIterator<>()
         {
             protected Pair<Long, LongSet> computeNext()
             {

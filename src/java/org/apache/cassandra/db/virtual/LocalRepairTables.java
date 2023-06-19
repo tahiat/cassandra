@@ -48,6 +48,8 @@ import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.service.ActiveRepairService;
 import org.apache.cassandra.utils.TimeUUID;
 
+import static org.apache.cassandra.utils.SuppressionConstants.METHODREF_RECEIVER;
+
 public class LocalRepairTables
 {
     private LocalRepairTables()
@@ -453,6 +455,7 @@ public class LocalRepairTables
         result.column("ranges", toStringList(desc.ranges));
     }
 
+    @SuppressWarnings(METHODREF_RECEIVER) // TODO probable bug in the Checker Framework (https://github.com/typetools/checker-framework/issues/6038)
     private static <T> List<String> toStringList(Collection<T> list)
     {
         if (list == null)
@@ -460,6 +463,7 @@ public class LocalRepairTables
         return list.stream().map(Object::toString).collect(Collectors.toList());
     }
 
+    @SuppressWarnings(METHODREF_RECEIVER) // TODO probable bug in the Checker Framework (https://github.com/typetools/checker-framework/issues/6038)
     private static <T> Set<String> toStringSet(Collection<T> list)
     {
         if (list == null)
