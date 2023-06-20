@@ -242,7 +242,6 @@ public class CompactionStrategyManager implements INotificationConsumer
      * @return
      */
     @VisibleForTesting
-    @SuppressWarnings("resource") // transaction is closed by AbstractCompactionTask::execute
     AbstractCompactionTask findUpgradeSSTableTask()
     {
         if (!isEnabled() || !DatabaseDescriptor.automaticSSTableUpgrade())
@@ -950,7 +949,6 @@ public class CompactionStrategyManager implements INotificationConsumer
      * @param ranges
      * @return
      */
-    @SuppressWarnings("resource")
     public AbstractCompactionStrategy.ScannerList maybeGetScanners(Collection<SSTableReader> sstables,  Collection<Range<Token>> ranges)
     {
         maybeReloadDiskBoundaries();

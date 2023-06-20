@@ -252,7 +252,6 @@ public abstract class AbstractCompactionStrategy
      * allow for a more memory efficient solution if we know the sstable don't overlap (see
      * LeveledCompactionStrategy for instance).
      */
-    @SuppressWarnings("resource")
     public ScannerList getScanners(Collection<SSTableReader> sstables, Collection<Range<Token>> ranges)
     {
         ArrayList<ISSTableScanner> scanners = new ArrayList<ISSTableScanner>();
@@ -366,7 +365,6 @@ public abstract class AbstractCompactionStrategy
 
             for (int i=0, isize=scanners.size(); i<isize; i++)
             {
-                @SuppressWarnings("resource")
                 ISSTableScanner scanner = scanners.get(i);
                 compressed += scanner.getCompressedLengthInBytes();
                 uncompressed += scanner.getLengthInBytes();

@@ -52,7 +52,6 @@ public class DefaultCompactionWriter extends CompactionAwareWriter
         this(cfs, directories, txn, nonExpiredSSTables, keepOriginals, sstableLevel);
     }
 
-    @SuppressWarnings("resource")
     public DefaultCompactionWriter(ColumnFamilyStore cfs, Directories directories, LifecycleTransaction txn, Set<SSTableReader> nonExpiredSSTables, boolean keepOriginals, int sstableLevel)
     {
         super(cfs, directories, txn, nonExpiredSSTables, keepOriginals);
@@ -74,7 +73,6 @@ public class DefaultCompactionWriter extends CompactionAwareWriter
         MetadataCollector collector = new MetadataCollector(txn.originals(), cfs.metadata().comparator, sstableLevel);
         SerializationHeader header = SerializationHeader.make(cfs.metadata(), nonExpiredSSTables);
 
-        @SuppressWarnings("resource")
         SSTableWriter writer = newWriterBuilder(descriptor).setMetadataCollector(collector)
                                                               .setSerializationHeader(header)
                                                               .setKeyCount(estimatedTotalKeys)
