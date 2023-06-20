@@ -1283,7 +1283,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
                     Iterator<SSTableMultiWriter> writerIterator = flushResults.iterator();
                     while (writerIterator.hasNext())
                     {
-                        @SuppressWarnings("resource")
                         SSTableMultiWriter writer = writerIterator.next();
                         if (writer.getFilePointer() > 0)
                         {
@@ -1894,7 +1893,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
         return nowInSec - metadata().params.gcGraceSeconds;
     }
 
-    @SuppressWarnings("resource")
     public RefViewFragment selectAndReference(Function<View, Iterable<SSTableReader>> filter)
     {
         long failingSince = -1L;
@@ -2503,7 +2501,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean, Memtable.Owner
                                           Supplier<Collection<Range<PartitionPosition>>> rangesSupplier,
                                           Refs<SSTableReader> placeIntoRefs)
     {
-        @SuppressWarnings("resource") // closed by finish or on exception
         SSTableMultiWriter memtableContent = writeMemtableRanges(rangesSupplier, repairSessionID);
         if (memtableContent != null)
         {

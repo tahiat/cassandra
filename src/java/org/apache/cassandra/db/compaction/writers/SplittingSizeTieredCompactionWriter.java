@@ -107,7 +107,6 @@ public class SplittingSizeTieredCompactionWriter extends CompactionAwareWriter
         MetadataCollector collector = new MetadataCollector(allSSTables, cfs.metadata().comparator, 0);
         SerializationHeader header = SerializationHeader.make(cfs.metadata(), nonExpiredSSTables);
 
-        @SuppressWarnings("resource")
         SSTableWriter writer = newWriterBuilder(descriptor).setKeyCount(currentPartitionsToWrite)
                                                               .setMetadataCollector(collector)
                                                               .setSerializationHeader(header)

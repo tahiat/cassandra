@@ -51,7 +51,6 @@ public class MajorLeveledCompactionWriter extends CompactionAwareWriter
         this(cfs, directories, txn, nonExpiredSSTables, maxSSTableSize, false);
     }
 
-    @SuppressWarnings("resource")
     public MajorLeveledCompactionWriter(ColumnFamilyStore cfs,
                                         Directories directories,
                                         LifecycleTransaction txn,
@@ -67,7 +66,6 @@ public class MajorLeveledCompactionWriter extends CompactionAwareWriter
     }
 
     @Override
-    @SuppressWarnings("resource")
     public boolean realAppend(UnfilteredRowIterator partition)
     {
         AbstractRowIndexEntry rie = sstableWriter.append(partition);
@@ -97,7 +95,6 @@ public class MajorLeveledCompactionWriter extends CompactionAwareWriter
         MetadataCollector collector = new MetadataCollector(txn.originals(), cfs.metadata().comparator, currentLevel);
         SerializationHeader serializationHeader = SerializationHeader.make(cfs.metadata(), txn.originals());
 
-        @SuppressWarnings("resource")
         SSTableWriter writer = newWriterBuilder(descriptor).setKeyCount(keysPerSSTable)
                                                            .setSerializationHeader(serializationHeader)
                                                            .setMetadataCollector(collector)

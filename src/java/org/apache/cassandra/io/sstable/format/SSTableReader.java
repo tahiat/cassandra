@@ -1531,7 +1531,6 @@ public abstract class SSTableReader extends SSTable implements UnfilteredSource,
         }
 
         // get a new reference to the shared GlobalTidy for this sstable
-        @SuppressWarnings("resource")
         public static Ref<GlobalTidy> get(SSTableReader sstable)
         {
             Descriptor descriptor = sstable.descriptor;

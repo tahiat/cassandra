@@ -97,7 +97,6 @@ public class SSTableTxnWriter extends Transactional.AbstractTransactional implem
         return writer.finished();
     }
 
-    @SuppressWarnings("resource") // log and writer closed during doPostCleanup
     public static SSTableTxnWriter create(ColumnFamilyStore cfs, Descriptor descriptor, long keyCount, long repairedAt, TimeUUID pendingRepair, boolean isTransient, int sstableLevel, SerializationHeader header)
     {
         LifecycleTransaction txn = LifecycleTransaction.offline(OperationType.WRITE);
@@ -106,7 +105,6 @@ public class SSTableTxnWriter extends Transactional.AbstractTransactional implem
     }
 
 
-    @SuppressWarnings("resource") // log and writer closed during doPostCleanup
     public static SSTableTxnWriter createRangeAware(TableMetadataRef metadata,
                                                     long keyCount,
                                                     long repairedAt,
@@ -134,7 +132,6 @@ public class SSTableTxnWriter extends Transactional.AbstractTransactional implem
         return new SSTableTxnWriter(txn, writer);
     }
 
-    @SuppressWarnings("resource") // log and writer closed during doPostCleanup
     public static SSTableTxnWriter create(TableMetadataRef metadata,
                                           Descriptor descriptor,
                                           long keyCount,

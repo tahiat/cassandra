@@ -682,7 +682,6 @@ public abstract class CassandraIndex implements Index
         };
     }
 
-    @SuppressWarnings("resource")
     private void buildBlocking()
     {
         baseCfs.forceBlockingFlush(ColumnFamilyStore.FlushReason.INDEX_BUILD_STARTED);
