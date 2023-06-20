@@ -31,7 +31,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,10 +40,10 @@ import org.apache.cassandra.db.memtable.Memtable;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.util.File;
+import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.schema.Schema;
 import org.apache.cassandra.schema.SchemaConstants;
 import org.apache.cassandra.schema.TableId;
-import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.service.paxos.cleanup.PaxosTableRepairs;
 import org.apache.cassandra.utils.CloseableIterator;
@@ -54,6 +53,7 @@ import static org.apache.cassandra.config.CassandraRelevantProperties.DISABLE_PA
 import static org.apache.cassandra.config.CassandraRelevantProperties.DISABLE_PAXOS_STATE_FLUSH;
 import static org.apache.cassandra.config.DatabaseDescriptor.paxosRepairEnabled;
 import static org.apache.cassandra.service.paxos.uncommitted.PaxosKeyState.mergeUncommitted;
+import static org.apache.cassandra.utils.SuppressionConstants.RESOURCE;
 
 /**
  * Tracks uncommitted paxos operations to enable operation completion as part of repair by returning an iterator of
@@ -152,6 +152,7 @@ public class PaxosUncommittedTracker
         return state;
     }
 
+    @SuppressWarnings(RESOURCE) // TODO currently cannot track resources in a map
     synchronized void flushUpdates(Memtable paxos) throws IOException
     {
         if (!stateFlushEnabled || !started)
@@ -237,6 +238,7 @@ public class PaxosUncommittedTracker
         started = true;
     }
 
+    @SuppressWarnings(RESOURCE) // TODO currently cannot track resources in a map
     public synchronized void rebuild(Iterator<PaxosKeyState> iterator) throws IOException
     {
         Preconditions.checkState(!started);

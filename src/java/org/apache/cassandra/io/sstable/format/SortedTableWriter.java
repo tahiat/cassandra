@@ -64,6 +64,8 @@ import org.apache.cassandra.utils.FilterFactory;
 import org.apache.cassandra.utils.IFilter;
 import org.apache.cassandra.utils.Throwables;
 import org.apache.cassandra.utils.concurrent.Transactional;
+import org.checkerframework.checker.mustcall.qual.InheritableMustCall;
+import org.checkerframework.checker.mustcall.qual.MustCallAlias;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -398,6 +400,7 @@ public abstract class SortedTableWriter<P extends SortedTablePartitionWriter> ex
         }
     }
 
+    @InheritableMustCall({ "doCommit", "doAbort"})
     protected static abstract class AbstractIndexWriter extends AbstractTransactional implements Transactional
     {
         protected final Descriptor descriptor;
@@ -471,8 +474,8 @@ public abstract class SortedTableWriter<P extends SortedTablePartitionWriter> ex
             return (B) this;
         }
 
-        public abstract SequentialWriter getDataWriter();
+        public abstract @MustCallAlias SequentialWriter getDataWriter();
 
-        public abstract P getPartitionWriter();
+        public abstract @MustCallAlias P getPartitionWriter();
     }
 }
