@@ -46,6 +46,7 @@ import org.apache.cassandra.io.util.RandomAccessReader;
 import org.apache.cassandra.schema.TableMetadata;
 import org.apache.cassandra.utils.AbstractIterator;
 import org.checkerframework.checker.calledmethods.qual.EnsuresCalledMethods;
+import org.checkerframework.checker.mustcall.qual.InheritableMustCall;
 import org.checkerframework.checker.mustcall.qual.Owning;
 
 import static org.apache.cassandra.dht.AbstractBounds.isEmpty;
@@ -53,6 +54,7 @@ import static org.apache.cassandra.dht.AbstractBounds.maxLeft;
 import static org.apache.cassandra.dht.AbstractBounds.minRight;
 import static org.apache.cassandra.utils.SuppressionConstants.MISSING_CREATES_MUSTCALL_FOR;
 
+@InheritableMustCall("doClose")
 public abstract class SSTableScanner<S extends SSTableReader,
                                      E extends AbstractRowIndexEntry,
                                      I extends SSTableScanner<S, E, I>.BaseKeyScanningIterator>
@@ -173,6 +175,7 @@ implements ISSTableScanner
         }
     }
 
+    @EnsuresCalledMethods(value = "this.dfile", methods = "close")
     protected abstract void doClose() throws IOException;
 
     @Override
@@ -217,6 +220,7 @@ implements ISSTableScanner
         return iterator.hasNext();
     }
 
+    @SuppressWarnings(MISSING_CREATES_MUSTCALL_FOR)
     public UnfilteredRowIterator next()
     {
         if (iterator == null)

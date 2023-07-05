@@ -21,9 +21,7 @@ package org.apache.cassandra.utils;
 public class SuppressionConstants
 {
     public static final String RESOURCE = "required.method.not.called";
-    public static final String METHODREF_RECEIVER = "methodref.receiver";
     public static final String CONTRACTS_CONDITIONAL_POSTCONDITION = "contracts.conditional.postcondition";
-    public static final String RESOURCES_IN_MAP = RESOURCE;
     public static final String ENSUREVARARGS_UNVERIFIED = "ensuresvarargs.unverified";
     public static final String MISSING_CREATES_MUSTCALL_FOR = "missing.creates.mustcall.for";
 }

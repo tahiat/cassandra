@@ -17,7 +17,7 @@
   ~ limitations under the License.
   -->
 <project basedir="." name="apache-cassandra--checkerframework">
-    <property name="checkerframework.version" value="3.35.0"/>
+    <property name="checkerframework.version" value="3.36.0"/>
     <property name="checkerframework.jars.dir" value="${build.dir}/checkerframework-jars"/>
     <property name="checkerframework.output.dir" value="${build.dir}/checkerframework-output"/>
 
@@ -100,11 +100,6 @@
                destdir="${checkerframework.output.dir}" source="${ant.java.version}" target="${ant.java.version}" includes="${_cf.check.only}"
                listfiles="${_cf.listfiles}">
             <src path="${build.src.java}"/>
-
-
-            <!-- Bug filed to Checker Framework https://github.com/typetools/checker-framework/issues/6030 -->
-            <exclude name="org/apache/cassandra/service/reads/DataResolver.java"/>
-            <exclude name="org/apache/cassandra/io/sstable/format/SSTableScanner.java"/>
 
             <!-- Generated sources are deliberately excluded from analysis because we cannot do anything with problems
                  found there (also because they crash CheckerFramework). Therefore, the regular compilation must be run

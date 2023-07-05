@@ -47,6 +47,8 @@ import org.apache.cassandra.schema.TableId;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.service.paxos.cleanup.PaxosTableRepairs;
 import org.apache.cassandra.utils.CloseableIterator;
+import org.apache.cassandra.utils.ResourcesMap;
+import org.checkerframework.checker.mustcall.qual.MustCall;
 
 import static org.apache.cassandra.config.CassandraRelevantProperties.AUTO_REPAIR_FREQUENCY_SECONDS;
 import static org.apache.cassandra.config.CassandraRelevantProperties.DISABLE_PAXOS_AUTO_REPAIRS;
@@ -152,18 +154,17 @@ public class PaxosUncommittedTracker
         return state;
     }
 
-    @SuppressWarnings(RESOURCE) // TODO currently cannot track resources in a map
     synchronized void flushUpdates(Memtable paxos) throws IOException
     {
         if (!stateFlushEnabled || !started)
             return;
 
-        Map<TableId, UncommittedTableData.FlushWriter> flushWriters = new HashMap<>();
+        ResourcesMap<TableId, UncommittedTableData.FlushWriter> flushWriters = new ResourcesMap<>();
         try (CloseableIterator<PaxosKeyState> iterator = updateSupplier.flushIterator(paxos))
         {
             while (iterator.hasNext())
             {
-                PaxosKeyState next = iterator.next();
+                @MustCall({}) PaxosKeyState next = iterator.next();
                 UncommittedTableData.FlushWriter writer = flushWriters.get(next.tableId);
                 if (writer == null)
                 {
@@ -172,16 +173,18 @@ public class PaxosUncommittedTracker
                 }
                 writer.append(next);
             }
+
+            flushWriters.removeAll(null, (acc, flushWriter) -> {
+                flushWriter.finish();
+                return null;
+            });
         }
         catch (Throwable t)
         {
-            for (UncommittedTableData.FlushWriter writer : flushWriters.values())
-                t = writer.abort(t);
+            flushWriters.removeAll(t, (acc, flushWriter) -> flushWriter.abort(acc));
             throw new IOException(t);
         }
 
-        for (UncommittedTableData.FlushWriter writer : flushWriters.values())
-            writer.finish();
     }
 
     @VisibleForTesting
@@ -237,18 +240,17 @@ public class PaxosUncommittedTracker
         started = true;
     }
 
-    @SuppressWarnings(RESOURCE) // TODO currently cannot track resources in a map
     public synchronized void rebuild(Iterator<PaxosKeyState> iterator) throws IOException
     {
         Preconditions.checkState(!started);
         truncate();
 
-        Map<TableId, UncommittedTableData.FlushWriter> flushWriters = new HashMap<>();
+        ResourcesMap<TableId, UncommittedTableData.FlushWriter> flushWriters = new ResourcesMap<>();
         try
         {
             while (iterator.hasNext())
             {
-                PaxosKeyState next = iterator.next();
+                @MustCall({}) PaxosKeyState next = iterator.next();
                 UncommittedTableData.FlushWriter writer = flushWriters.get(next.tableId);
                 if (writer == null)
                 {
@@ -257,13 +259,14 @@ public class PaxosUncommittedTracker
                 }
                 writer.append(next);
             }
-            for (UncommittedTableData.FlushWriter writer : flushWriters.values())
-                writer.finish();
+            flushWriters.removeAll(null, (acc, flushWriter) -> {
+                flushWriter.finish();
+                return null;
+            });
         }
         catch (Throwable t)
         {
-            for (UncommittedTableData.FlushWriter writer : flushWriters.values())
-                t = writer.abort(t);
+            flushWriters.removeAll(t, (acc, flushWriter) -> flushWriter.abort(acc));
             throw new IOException(t);
         }
 

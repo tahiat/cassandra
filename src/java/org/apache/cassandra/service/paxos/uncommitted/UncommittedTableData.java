@@ -90,7 +90,7 @@ public class UncommittedTableData
     private static final SchemaElement UNKNOWN_TABLE = TableMetadata.minimal("UNKNOWN", "UNKNOWN");
     private static final ExecutorPlus executor = executorFactory().sequential("PaxosUncommittedMerge");
 
-    @InheritableMustCall({ "finish"})
+    @InheritableMustCall({ "finish", "abort" })
     public interface FlushWriter
     {
         void append(PaxosKeyState commitState) throws IOException;
