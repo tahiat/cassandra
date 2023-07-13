@@ -315,11 +315,9 @@ public class TypeUtil
         return type;
     }
 
-    public static float[] decomposeVector(IndexContext indexContext, ByteBuffer byteBuffer)
+    public static float[] decomposeVector(AbstractType<?> type, ByteBuffer byteBuffer)
     {
-        return ((VectorType.VectorSerializer)indexContext.getValidator()
-                                                         .getSerializer())
-               .deserializeFloatArray(byteBuffer);
+        return ((VectorType.VectorSerializer)type.getSerializer()).deserializeFloatArray(byteBuffer);
     }
 
     private static ByteBuffer cellValue(ColumnMetadata column, IndexTarget.Type indexType, Cell cell)

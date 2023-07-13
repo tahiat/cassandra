@@ -114,9 +114,7 @@ public class VectorIndexSearcher extends IndexSearcher implements SegmentOrderin
         if (bitsOrPostingList.skipANN())
             return bitsOrPostingList.postingList();
 
-        ByteBuffer buffer = exp.lower.value.raw;
-        float[] queryVector = TypeUtil.decomposeVector(indexContext, buffer.duplicate());
-        return graph.search(queryVector, limit, bitsOrPostingList.getBits(), Integer.MAX_VALUE, context.queryContext);
+        return graph.search(exp.lower.value.vector, limit, bitsOrPostingList.getBits(), Integer.MAX_VALUE, context.queryContext);
     }
 
     /**

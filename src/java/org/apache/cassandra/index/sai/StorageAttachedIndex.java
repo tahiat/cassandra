@@ -543,13 +543,15 @@ public class StorageAttachedIndex implements Index
         SingleColumnRestriction.AnnRestriction annRestriction = (SingleColumnRestriction.AnnRestriction) restriction;
         VectorSimilarityFunction function = indexContext.getIndexWriterConfig().getSimilarityFunction();
 
-        float[] target = TypeUtil.decomposeVector(indexContext, annRestriction.value(options).duplicate());
+        AbstractType<?> validatorIndexContext = indexContext.getValidator();
+        
+        float[] target = TypeUtil.decomposeVector(validatorIndexContext, annRestriction.value(options).duplicate());
 
         return (leftBuf, rightBuf) -> {
-            float[] left = TypeUtil.decomposeVector(indexContext, leftBuf.get(columnIndex).duplicate());
+            float[] left = TypeUtil.decomposeVector(validatorIndexContext, leftBuf.get(columnIndex).duplicate());
             double scoreLeft = function.compare(left, target);
 
-            float[] right = TypeUtil.decomposeVector(indexContext, rightBuf.get(columnIndex).duplicate());
+            float[] right = TypeUtil.decomposeVector(validatorIndexContext, rightBuf.get(columnIndex).duplicate());
             double scoreRight = function.compare(right, target);
             return Double.compare(scoreRight, scoreLeft); // descending order
         };

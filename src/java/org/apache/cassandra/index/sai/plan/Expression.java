@@ -383,17 +383,19 @@ public class Expression
     }
 
     /**
-     * A representation of a column value in it's raw and encoded form.
+     * A representation of a column value in its raw and encoded form.
      */
     public static class Value
     {
         public final ByteBuffer raw;
         public final ByteBuffer encoded;
+        public final float[] vector;
 
         public Value(ByteBuffer value, AbstractType<?> type)
         {
             this.raw = value;
             this.encoded = TypeUtil.encode(value, type);
+            this.vector = type.isVector() ? TypeUtil.decomposeVector(type, raw.duplicate()) : null;
         }
 
         @Override

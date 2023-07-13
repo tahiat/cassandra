@@ -145,8 +145,7 @@ public class VectorMemtableIndex implements MemtableIndex
     {
         assert expr.getOp() == Expression.Op.ANN : "Only ANN is supported for vector search, received " + expr.getOp();
 
-        var buffer = expr.lower.value.raw;
-        float[] qv = TypeUtil.decomposeVector(indexContext, buffer);
+        float[] qv = expr.lower.value.vector;
 
         Bits bits = null;
         if (!RangeUtil.coversFullRing(keyRange))

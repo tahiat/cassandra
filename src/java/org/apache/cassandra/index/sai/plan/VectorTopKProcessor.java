@@ -173,7 +173,7 @@ public class VectorTopKProcessor
         ByteBuffer value = indexContext.getValueOf(key, row, FBUtilities.nowInSeconds());
         if (value != null)
         {
-            float[] vector = TypeUtil.decomposeVector(indexContext, value);
+            float[] vector = TypeUtil.decomposeVector(indexContext.getValidator(), value);
             return indexContext.getIndexWriterConfig().getSimilarityFunction().compare(vector, queryVector);
         }
         return 0;
@@ -190,7 +190,7 @@ public class VectorTopKProcessor
             if (sai != null)
             {
 
-                float[] qv = TypeUtil.decomposeVector(sai.getIndexContext(), expression.getIndexValue().duplicate());
+                float[] qv = TypeUtil.decomposeVector(sai.getIndexContext().getValidator(), expression.getIndexValue().duplicate());
                 return Pair.create(sai.getIndexContext(), qv);
             }
         }
