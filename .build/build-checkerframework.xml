@@ -17,7 +17,7 @@
   ~ limitations under the License.
   -->
 <project basedir="." name="apache-cassandra--checkerframework">
-    <property name="checkerframework.version" value="3.36.0"/>
+    <property name="checkerframework.version" value="3.37.0-SNAPSHOT"/>
     <property name="checkerframework.jars.dir" value="${build.dir}/checkerframework-jars"/>
     <property name="checkerframework.output.dir" value="${build.dir}/checkerframework-output"/>
 
