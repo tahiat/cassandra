@@ -288,12 +288,17 @@ public final class Throwables
                unwrapped instanceof InvocationTargetException)
             unwrapped = unwrapped.getCause();
 
-        // I don't think it make sense for those 2 exception classes to ever be used with null causes, but no point
-        // in failing here if this happen. We still wrap the original exception if that happen so we get a sign
-        // that the assumption of this method is wrong.
-        return unwrapped == null
-               ? new RuntimeException("Got wrapping exception not wrapping anything", t)
-               : unwrapped;
+        if (unwrapped == null)
+            throw new RuntimeException("Got wrapping exception not wrapping anything", t);
+
+        if (!t.getStackTrace()[t.getStackTrace().length - 1].getClassName().equals(Thread.class.getName()))
+        {
+            Throwable source = new Throwable(t.getClass().getName() + ": " + t.getMessage());
+            source.setStackTrace(t.getStackTrace());
+            unwrapped.addSuppressed(source);
+        }
+
+        return unwrapped;
     }
 
     /**
