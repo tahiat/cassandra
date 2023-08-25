@@ -21,6 +21,7 @@ package org.apache.cassandra.distributed.test.accord;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +52,8 @@ import org.apache.cassandra.distributed.api.ConsistencyLevel;
 import org.apache.cassandra.distributed.api.Feature;
 import org.apache.cassandra.distributed.api.QueryResults;
 import org.apache.cassandra.distributed.api.SimpleQueryResult;
+import org.apache.cassandra.distributed.api.TokenSupplier;
+import org.apache.cassandra.distributed.shared.NetworkTopology;
 import org.apache.cassandra.distributed.test.TestBaseImpl;
 import org.apache.cassandra.distributed.util.QueryResultUtil;
 import org.apache.cassandra.service.accord.AccordService;
@@ -153,6 +156,20 @@ public abstract class AccordTestBase extends TestBaseImpl
                                                                    .set("legacy_paxos_strategy", "accord"))
                            .withInstanceInitializer(EnforceUpdateDoesNotPerformRead::install)
                            .withInstanceInitializer(BBAccordCoordinateCountHelper::install)
+                           .withTokenSupplier(new TokenSupplier()
+                           {
+                               private final TokenSupplier delegate = TokenSupplier.evenlyDistributedTokens(2, 1);
+
+                               @Override
+                               public Collection<String> tokens(int nodeId)
+                               {
+                                   if (nodeId == 3)
+                                       return Collections.emptyList();
+                                   return delegate.tokens(nodeId);
+                               }
+                           })
+                           .withNodeIdTopology(NetworkTopology.singleDcNetworkTopology(3, "dc0", "rack0"))
+
                            .start());
     }
 
