@@ -171,7 +171,7 @@ public class ClusterMetadataService
         this.snapshots = new MetadataSnapshots.SystemKeyspaceMetadataSnapshots();
 
         Processor localProcessor;
-        if (CassandraRelevantProperties.TCM_USE_ATOMIC_LONG_PROCESSOR.getBoolean())
+        if (CassandraRelevantProperties.TCM_USE_ATOMIC_LONG_PROCESSOR.getBoolean())  // TODO: instead of this, we should be able to configure the processor by providing the class name; we can get rid of sync log and atomic long processor from the production code then
         {
             LogStorage logStorage = LogStorage.SystemKeyspace;
             log = LocalLog.sync(initial, logStorage, true, isReset);
@@ -521,6 +521,7 @@ public class ClusterMetadataService
         }
         catch (TimeoutException t)
         {
+            // TODO: should we have some metric around timeouts?
             throw new IllegalStateException(String.format("Timed out while waiting for the follower to enact the epoch %s", result.success().epoch), t);
         }
         catch (InterruptedException e)
@@ -862,7 +863,7 @@ public class ClusterMetadataService
         }
     }
 
-    public enum State
+    public enum State // JACEK: documentation for each state would be very useful
     {
         LOCAL, REMOTE, GOSSIP, RESET
     }

@@ -161,7 +161,7 @@ public class TableMetadata implements SchemaElement
     public final String keyspace;
     public final String name;
     public final TableId id;
-    public final Epoch epoch;
+    public final Epoch epoch; // JACEK: why epoch is attached both to DistributedSchema and TableMetadata?
 
     public final IPartitioner partitioner;
     public final Kind kind;

@@ -499,6 +499,7 @@ public final class SystemKeyspace
                                                       .partitioner(new LocalPartitioner(LongType.instance))
                                                       .build();
 
+    // JACEK: It looks like it is used to store a pair of values. Wouldn't it make sense to store that in the LOCAL table instead of creating a dedicated one?
     public static final TableMetadata LastSealedPeriod = parse(LAST_SEALED_PERIOD_TABLE_NAME,
                                                                "ClusterMetadata last sealed period",
                                                                "CREATE TABLE IF NOT EXISTS %s (" +

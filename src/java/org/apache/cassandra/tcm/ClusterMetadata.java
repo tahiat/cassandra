@@ -94,6 +94,7 @@ import static org.apache.cassandra.db.TypeSizes.sizeof;
  *
  * @see MetadataSnapshots for more information about cluster metadata snapshots
  */
+// JACEK: for all those bean-like classes we should consider using some reflection based equals, hashCode, and ser/de verifiers
 public class ClusterMetadata
 {
     public static final Serializer serializer = new Serializer();
