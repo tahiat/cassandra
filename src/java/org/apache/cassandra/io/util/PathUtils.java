@@ -17,16 +17,39 @@
  */
 package org.apache.cassandra.io.util;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
+import java.io.IOError;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
 import java.nio.channels.FileChannel;
-import java.nio.file.*;
-import java.nio.file.attribute.*;
-import java.util.*;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.FileStore;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.FileAttribute;
+import java.nio.file.attribute.FileTime;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFileAttributes;
+import java.nio.file.attribute.PosixFilePermission;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.function.*;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.IntFunction;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
 import javax.annotation.Nullable;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -43,7 +66,11 @@ import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.NoSpamLogger;
 
-import static java.nio.file.StandardOpenOption.*;
+import static java.nio.file.StandardOpenOption.APPEND;
+import static java.nio.file.StandardOpenOption.CREATE;
+import static java.nio.file.StandardOpenOption.READ;
+import static java.nio.file.StandardOpenOption.TRUNCATE_EXISTING;
+import static java.nio.file.StandardOpenOption.WRITE;
 import static java.util.Collections.unmodifiableSet;
 import static org.apache.cassandra.config.CassandraRelevantProperties.USE_NIX_RECURSIVE_DELETE;
 import static org.apache.cassandra.utils.Throwables.merge;
@@ -361,24 +388,32 @@ public final class PathUtils
         }
     }
 
+    public static void deleteRecursive(Path path)
+    {
+        deleteRecursive(path, false);
+    }
+
     /**
      * Deletes all files and subdirectories under "path".
      * @param path file to be deleted
      * @throws FSWriteError if any part of the tree cannot be deleted
      */
-    public static void deleteRecursive(Path path)
+    public static void deleteRecursive(Path path, boolean queitly)
     {
         if (USE_NIX_RECURSIVE_DELETE.getBoolean() && path.getFileSystem() == FileSystems.getDefault())
         {
-            deleteRecursiveUsingNixCommand(path, false);
+            deleteRecursiveUsingNixCommand(path, queitly);
             return;
         }
 
         if (isDirectory(path))
-            forEach(path, PathUtils::deleteRecursive);
+            forEach(path, p -> deleteRecursive(p, queitly));
 
         // The directory is now empty, so now it can be smoked
-        delete(path);
+        if (queitly)
+            tryDelete(path);
+        else
+            delete(path);
     }
 
     /**

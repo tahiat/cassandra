@@ -32,6 +32,7 @@ import org.apache.cassandra.db.Keyspace;
 import org.apache.cassandra.db.SystemKeyspace;
 import org.apache.cassandra.db.commitlog.CommitLog;
 import org.apache.cassandra.io.util.File;
+import org.apache.cassandra.io.util.PathUtils;
 import org.apache.cassandra.locator.AbstractEndpointSnitch;
 import org.apache.cassandra.locator.InetAddressAndPort;
 import org.apache.cassandra.locator.Replica;
@@ -167,7 +168,7 @@ public final class ServerTestUtils
     {
         if (directory.exists())
         {
-            Arrays.stream(directory.tryList()).forEach(File::deleteRecursive);
+            Arrays.stream(directory.tryList()).forEach(file -> PathUtils.deleteRecursive(file.toPath(), true));
         }
     }
 
