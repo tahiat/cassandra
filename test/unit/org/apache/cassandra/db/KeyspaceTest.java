@@ -28,7 +28,6 @@ import org.junit.Test;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.cql3.CQLTester;
 import org.apache.cassandra.cql3.ColumnIdentifier;
-import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.rows.Cell;
 import org.apache.cassandra.db.rows.Row;
 import org.apache.cassandra.db.rows.RowIterator;
@@ -44,26 +43,6 @@ import static org.junit.Assert.*;
 
 public class KeyspaceTest extends CQLTester
 {
-    // Test needs synchronous table drop to avoid flushes causing flaky failures of testLimitSSTables
-
-    @Override
-    protected String createTable(String query)
-    {
-        return super.createTable(KEYSPACE_PER_TEST, query);
-    }
-
-    @Override
-    protected UntypedResultSet execute(String query, Object... values) throws Throwable
-    {
-        return executeFormattedQuery(formatQuery(KEYSPACE_PER_TEST, query), values);
-    }
-
-    @Override
-    public ColumnFamilyStore getCurrentColumnFamilyStore()
-    {
-        return super.getCurrentColumnFamilyStore(KEYSPACE_PER_TEST);
-    }
-
     @Test
     public void testGetRowNoColumns() throws Throwable
     {
@@ -419,7 +398,7 @@ public class KeyspaceTest extends CQLTester
 
         execute("INSERT INTO %s (a, b, c) VALUES (?, ?, ?)", "0", 0, 0);
 
-        Keyspace ks = Keyspace.open(KEYSPACE_PER_TEST);
+        Keyspace ks = Keyspace.open(KEYSPACE);
         String table = getCurrentColumnFamilyStore().name;
         ks.snapshot("test", table);
 

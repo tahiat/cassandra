@@ -51,24 +51,24 @@ public class GcCompactionTest extends CQLTester
     @Override
     protected String createTable(String query)
     {
-        return super.createTable(KEYSPACE_PER_TEST, query);
+        return super.createTable(KEYSPACE, query);
     }
 
     @Override
     protected UntypedResultSet execute(String query, Object... values) throws Throwable
     {
-        return executeFormattedQuery(formatQuery(KEYSPACE_PER_TEST, query), values);
+        return executeFormattedQuery(formatQuery(KEYSPACE, query), values);
     }
 
     @Override
     public ColumnFamilyStore getCurrentColumnFamilyStore()
     {
-        return super.getCurrentColumnFamilyStore(KEYSPACE_PER_TEST);
+        return super.getCurrentColumnFamilyStore(KEYSPACE);
     }
 
     public void flush()
     {
-        flush(KEYSPACE_PER_TEST);
+        flush(KEYSPACE);
     }
 
     @Test

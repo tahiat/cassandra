@@ -74,7 +74,6 @@ public class StatusTest extends CQLTester
         // Deleting these tables will simulate we're bootstrapping
         schemaChange("DROP KEYSPACE " + SchemaConstants.TRACE_KEYSPACE_NAME);
         schemaChange("DROP KEYSPACE " + CQLTester.KEYSPACE);
-        schemaChange("DROP KEYSPACE " + CQLTester.KEYSPACE_PER_TEST);
 
         ToolRunner.ToolResult tool = ToolRunner.invokeNodetool("status");
         tool.assertOnCleanExit();

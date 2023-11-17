@@ -25,8 +25,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.util.concurrent.Uninterruptibles;
-import org.apache.cassandra.io.util.File;
-import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
@@ -42,6 +40,7 @@ import org.apache.cassandra.db.rows.EncodingStats;
 import org.apache.cassandra.exceptions.ConfigurationException;
 import org.apache.cassandra.io.sstable.format.SSTableReader;
 import org.apache.cassandra.io.sstable.format.SSTableWriter;
+import org.apache.cassandra.io.util.File;
 import org.apache.cassandra.schema.KeyspaceParams;
 import org.apache.cassandra.utils.TimeUUID;
 
@@ -84,7 +83,6 @@ public class SSTableWriterTestBase extends SchemaLoader
         DatabaseDescriptor.setIndexAccessMode(indexMode);
     }
 
-    @After
     public void truncateCF()
     {
         Keyspace keyspace = Keyspace.open(KEYSPACE);
