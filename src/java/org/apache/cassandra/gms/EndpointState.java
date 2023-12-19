@@ -20,7 +20,6 @@ package org.apache.cassandra.gms;
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.stream.Collectors;
 
 import javax.annotation.Nullable;
 
