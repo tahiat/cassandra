@@ -56,8 +56,8 @@ public class MemtableKeyRangeIterator extends KeyRangeIterator
                                      PrimaryKey.Factory pkFactory,
                                      AbstractBounds<PartitionPosition> keyRange)
     {
-        super(pkFactory.createTokenOnly(keyRange.left.getToken()),
-              pkFactory.createTokenOnly(maxToken(keyRange, memtable.metadata().partitioner)),
+        super(pkFactory.create(keyRange.left.getToken()),
+              pkFactory.create(maxToken(keyRange, memtable.metadata().partitioner)),
               memtable.operationCount());
 
         TableMetadata metadata = memtable.metadata();
@@ -81,7 +81,7 @@ public class MemtableKeyRangeIterator extends KeyRangeIterator
 
     public static MemtableKeyRangeIterator create(Memtable memtable, AbstractBounds<PartitionPosition> keyRange)
     {
-        PrimaryKey.Factory pkFactory = new PrimaryKey.Factory(memtable.metadata().comparator);
+        PrimaryKey.Factory pkFactory = new PrimaryKey.Factory(memtable.metadata().partitioner, memtable.metadata().comparator);
         return new MemtableKeyRangeIterator(memtable, pkFactory, keyRange);
     }
 
@@ -97,7 +97,7 @@ public class MemtableKeyRangeIterator extends KeyRangeIterator
         if (partitionIterator.hasNext())
         {
             this.rowIterator = partitionIterator.next();
-            if (!nextKey.hasEmptyClustering() && rowIterator.partitionKey().equals(nextKey.partitionKey()))
+            if (nextKey.kind().hasClustering && !nextKey.clustering().isEmpty() && rowIterator.partitionKey().equals(nextKey.partitionKey()))
             {
                 Slice slice = Slice.make(nextKey.clustering(), Clustering.EMPTY);
                 Slices slices = Slices.with(this.memtable.metadata().comparator, slice);
@@ -130,7 +130,10 @@ public class MemtableKeyRangeIterator extends KeyRangeIterator
                 continue;
 
             Row row = (Row) unfiltered;
-            return pkFactory.create(rowIterator.partitionKey(), row.clustering());
+            if (row.clustering().isEmpty())
+                return pkFactory.create(rowIterator.partitionKey());
+            else
+                return pkFactory.create(rowIterator.partitionKey(), row.clustering());
         }
         return endOfData();
     }

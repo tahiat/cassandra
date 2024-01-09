@@ -52,11 +52,11 @@ public final class PrimaryKeyMapIterator extends KeyRangeIterator
         PrimaryKeyMap keys = ctx.primaryKeyMapFactory.newPerSSTablePrimaryKeyMap();
         long count = keys.count();
 
-        PrimaryKey.Factory pkFactory = new PrimaryKey.Factory(ctx.sstable.metadata().comparator);
+        PrimaryKey.Factory pkFactory = new PrimaryKey.Factory(ctx.sstable.metadata().partitioner, ctx.sstable.metadata().comparator);
         Token minToken = keyRange.left.getToken();
         Token maxToken = keyRange.right.getToken();
-        PrimaryKey minKeyBound = pkFactory.createTokenOnly(minToken);
-        PrimaryKey maxKeyBound = pkFactory.createTokenOnly(maxToken);
+        PrimaryKey minKeyBound = pkFactory.create(minToken);
+        PrimaryKey maxKeyBound = pkFactory.create(maxToken);
         PrimaryKey sstableMinKey = count > 0 ? keys.primaryKeyFromRowId(0) : null;
         PrimaryKey sstableMaxKey = count > 0 ? keys.primaryKeyFromRowId(count - 1) : null;
         PrimaryKey minKey = (sstableMinKey == null || minKeyBound.compareTo(sstableMinKey) > 0)
