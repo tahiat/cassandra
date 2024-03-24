@@ -1,0 +1,5 @@
+[javac] /home/jlewandowski/dev/cassandra/c18239-static-analysis/src/java/org/apache/cassandra/index/sasi/conf/IndexMode.java:175: error: [builder:required.method.not.known] The checker cannot determine the must call methods of literalOption or any of its aliases, so it could not determine if they were called. Typically, this error indicates that you need to write an @MustCall annotation (often on an unconstrained generic type).
+[javac]             String literalOption = indexOptions.get(INDEX_IS_LITERAL_OPTION);
+[javac]                    ^
+[javac]   The type of object is: java.lang.String.
+[javac]   Reason for going out of scope: regular method exit

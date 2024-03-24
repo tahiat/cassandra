@@ -1,0 +1,25 @@
+plugins {
+    id 'java-library'
+    id 'org.checkerframework' version '0.6.37'
+}
+
+apply plugin: 'org.checkerframework'
+
+repositories {
+    // Use Maven Central for resolving dependencies.
+    mavenCentral()
+}
+
+checkerFramework {
+    checkers = [
+            'org.checkerframework.checker.resourceleak.ResourceLeakChecker'
+    ]
+    excludeTests = true
+}
+
+
+
+dependencies {
+  compileOnly 'org.checkerframework:checker-qual:3.36.0'
+  checkerFramework 'org.checkerframework:checker:3.36.0'
+}
