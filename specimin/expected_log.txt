@@ -1,10 +1,16 @@
-SourceChecker.typeProcess: unexpected Throwable (NullPointerException) while processing /Users/msridhar/git-repos/checker-framework/checker/tests/resourceleak/Issue6030.java
-  ; The Checker Framework crashed.  Please report the crash.
-  Compilation unit: /Users/msridhar/git-repos/checker-framework/checker/tests/resourceleak/Issue6030.java
-  Last visited tree at line 6 column 1:
-  public class Issue6030 {
-  Exception: java.lang.NullPointerException; java.lang.NullPointerException
-  	at org.checkerframework.javacutil.AnnotationUtils.getElementValueArray(AnnotationUtils.java:1005)
-  	at org.checkerframework.checker.resourceleak.MustCallConsistencyAnalyzer.checkReassignmentToField(MustCallConsistencyAnalyzer.java:1446)
-  	at org.checkerframework.checker.resourceleak.MustCallConsistencyAnalyzer.updateObligationsForAssignment(MustCallConsistencyAnalyzer.java:1089)
-  	at org.checkerframework.checker.resourceleak.MustCallConsistencyAnalyzer.analyze(MustCallConsistencyAnalyzer.java:528)
+error: SourceChecker.typeProcess: unexpected Throwable (NullPointerException) while processing /home/jlewandowski/dev/cassandra/c18190-ecj/src/java/org/apache/cassandra/service/reads/DataResolver.java
+      ; The Checker Framework crashed.  Please report the crash.
+      Compilation unit: /home/jlewandowski/dev/cassandra/c18190-ecj/src/java/org/apache/cassandra/service/reads/DataResolver.java
+      Last visited tree at line 63 column 1:
+      public class DataResolver<E extends Endpoints<E>, P extends ReplicaPlan.ForRead<E, P>> extends ResponseResolver<E, P>
+      Exception: java.lang.NullPointerException; java.lang.NullPointerException
+        at org.checkerframework.framework.flow.CFAbstractStore.<init>(CFAbstractStore.java:154)
+        at org.checkerframework.framework.flow.CFStore.<init>(CFStore.java:16)
+        at org.checkerframework.framework.flow.CFAnalysis.createCopiedStore(CFAnalysis.java:30)
+        at org.checkerframework.framework.flow.CFAnalysis.createCopiedStore(CFAnalysis.java:9)
+        at org.checkerframework.framework.flow.CFAbstractTransfer.initialStore(CFAbstractTransfer.java:287)
+       	at org.checkerframework.framework.flow.CFAbstractTransfer.initialStore(CFAbstractTransfer.java:97)
+       	at org.checkerframework.dataflow.analysis.ForwardAnalysisImpl.initInitialInputs(ForwardAnalysisImpl.java:346)
+       	at org.checkerframework.dataflow.analysis.AbstractAnalysis.init(AbstractAnalysis.java:376)
+       	at org.checkerframework.dataflow.analysis.ForwardAnalysisImpl.performAnalysis(ForwardAnalysisImpl.java:102)
+       	at org.checkerframework.framework.flow.CFAbstractAnalysis.performAnalysis(CFAbstractAnalysis.java:147)
