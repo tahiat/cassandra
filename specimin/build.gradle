@@ -1,0 +1,30 @@
+plugins {
+    id 'java-library'
+    id 'org.checkerframework' version '0.6.37'
+}
+
+apply plugin: 'org.checkerframework'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+checkerFramework {
+    checkers = [
+            'org.checkerframework.checker.resourceleak.ResourceLeakChecker'
+    ]
+    excludeTests = true
+}
+
+
+
+dependencies {
+  compileOnly 'org.checkerframework:checker-qual:3.35.0'
+  checkerFramework 'org.checkerframework:checker:3.35.0'
+}

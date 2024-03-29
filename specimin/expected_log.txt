@@ -1,0 +1,10 @@
+SourceChecker.typeProcess: unexpected Throwable (NullPointerException) while processing /Users/msridhar/git-repos/checker-framework/checker/tests/resourceleak/Issue6030.java
+  ; The Checker Framework crashed.  Please report the crash.
+  Compilation unit: /Users/msridhar/git-repos/checker-framework/checker/tests/resourceleak/Issue6030.java
+  Last visited tree at line 6 column 1:
+  public class Issue6030 {
+  Exception: java.lang.NullPointerException; java.lang.NullPointerException
+  	at org.checkerframework.javacutil.AnnotationUtils.getElementValueArray(AnnotationUtils.java:1005)
+  	at org.checkerframework.checker.resourceleak.MustCallConsistencyAnalyzer.checkReassignmentToField(MustCallConsistencyAnalyzer.java:1446)
+  	at org.checkerframework.checker.resourceleak.MustCallConsistencyAnalyzer.updateObligationsForAssignment(MustCallConsistencyAnalyzer.java:1089)
+  	at org.checkerframework.checker.resourceleak.MustCallConsistencyAnalyzer.analyze(MustCallConsistencyAnalyzer.java:528)
