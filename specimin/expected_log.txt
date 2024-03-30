@@ -1,10 +1,31 @@
-SourceChecker.typeProcess: unexpected Throwable (NullPointerException) while processing /Users/msridhar/git-repos/checker-framework/checker/tests/resourceleak/Issue6030.java
-  ; The Checker Framework crashed.  Please report the crash.
-  Compilation unit: /Users/msridhar/git-repos/checker-framework/checker/tests/resourceleak/Issue6030.java
-  Last visited tree at line 6 column 1:
-  public class Issue6030 {
-  Exception: java.lang.NullPointerException; java.lang.NullPointerException
-  	at org.checkerframework.javacutil.AnnotationUtils.getElementValueArray(AnnotationUtils.java:1005)
-  	at org.checkerframework.checker.resourceleak.MustCallConsistencyAnalyzer.checkReassignmentToField(MustCallConsistencyAnalyzer.java:1446)
-  	at org.checkerframework.checker.resourceleak.MustCallConsistencyAnalyzer.updateObligationsForAssignment(MustCallConsistencyAnalyzer.java:1089)
-  	at org.checkerframework.checker.resourceleak.MustCallConsistencyAnalyzer.analyze(MustCallConsistencyAnalyzer.java:528)
+; The Checker Framework crashed.  Please report the crash.
+       Compilation unit: /Users/tahiatul/Documents/SPECIMEN/specimin-evaluation/ISSUES/cf-6030/input/cassandra/src/java/org/apache/cassandra/io/sstable/format/SSTableScanner.java
+       Last visited tree at line 55 column 1:
+       public abstract class SSTableScanner<S extends SSTableReader,
+       Exception: java.lang.NullPointerException; java.lang.NullPointerException
+       	at org.checkerframework.javacutil.AnnotationUtils.getElementValueArray(AnnotationUtils.java:1005)
+       	at org.checkerframework.checker.resourceleak.MustCallConsistencyAnalyzer.checkReassignmentToField(MustCallConsistencyAnalyzer.java:1404)
+       	at org.checkerframework.checker.resourceleak.MustCallConsistencyAnalyzer.updateObligationsForAssignment(MustCallConsistencyAnalyzer.java:1087)
+       	at org.checkerframework.checker.resourceleak.MustCallConsistencyAnalyzer.analyze(MustCallConsistencyAnalyzer.java:526)
+       	at org.checkerframework.checker.resourceleak.ResourceLeakAnnotatedTypeFactory.postAnalyze(ResourceLeakAnnotatedTypeFactory.java:138)
+       	at org.checkerframework.framework.type.GenericAnnotatedTypeFactory.analyze(GenericAnnotatedTypeFactory.java:1603)
+       	at org.checkerframework.framework.type.GenericAnnotatedTypeFactory.performFlowAnalysis(GenericAnnotatedTypeFactory.java:1441)
+       	at org.checkerframework.framework.type.GenericAnnotatedTypeFactory.checkAndPerformFlowAnalysis(GenericAnnotatedTypeFactory.java:1927)
+       	at org.checkerframework.framework.type.GenericAnnotatedTypeFactory.preProcessClassTree(GenericAnnotatedTypeFactory.java:421)
+       	at org.checkerframework.common.basetype.BaseTypeVisitor.visitClass(BaseTypeVisitor.java:533)
+       	at org.checkerframework.common.basetype.BaseTypeVisitor.visitClass(BaseTypeVisitor.java:183)
+       	at jdk.compiler/com.sun.tools.javac.tree.JCTree$JCClassDecl.accept(JCTree.java:808)
+       	at jdk.compiler/com.sun.source.util.TreePathScanner.scan(TreePathScanner.java:56)
+       	at org.checkerframework.framework.source.SourceVisitor.visit(SourceVisitor.java:86)
+       	at org.checkerframework.framework.source.SourceChecker.typeProcess(SourceChecker.java:1030)
+       	at org.checkerframework.common.basetype.BaseTypeChecker.typeProcess(BaseTypeChecker.java:560)
+       	at org.checkerframework.javacutil.AbstractTypeProcessor$AttributionTaskListener.finished(AbstractTypeProcessor.java:188)
+       	at jdk.compiler/com.sun.tools.javac.api.ClientCodeWrapper$WrappedTaskListener.finished(ClientCodeWrapper.java:828)
+       	at jdk.compiler/com.sun.tools.javac.api.MultiTaskListener.finished(MultiTaskListener.java:132)
+       	at jdk.compiler/com.sun.tools.javac.main.JavaCompiler.flow(JavaCompiler.java:1414)
+       	at jdk.compiler/com.sun.tools.javac.main.JavaCompiler.flow(JavaCompiler.java:1371)
+       	at jdk.compiler/com.sun.tools.javac.main.JavaCompiler.compile(JavaCompiler.java:973)
+       	at jdk.compiler/com.sun.tools.javac.main.Main.compile(Main.java:311)
+       	at jdk.compiler/com.sun.tools.javac.main.Main.compile(Main.java:170)
+       	at jdk.compiler/com.sun.tools.javac.Main.compile(Main.java:57)
+       	at jdk.compiler/com.sun.tools.javac.Main.main(Main.java:43)
